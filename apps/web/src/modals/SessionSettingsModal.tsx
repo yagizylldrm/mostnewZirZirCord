@@ -1,5 +1,5 @@
 import { can, canModerate, formatSessionCode, type BanDTO } from '@zirzircord/shared';
-import { memberName } from '@zirzircord/client-core';
+import { listedMembers, memberName } from '@zirzircord/client-core';
 import { Copy, RefreshCw } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { Avatar, Button, Field, Modal, RoleBadge, ToggleRow, cx, inputCls } from '../components/ui';
@@ -118,7 +118,7 @@ export function SessionSettingsModal() {
 
   function Members() {
     const [modId, setModId] = useState('');
-    const members = Object.values(view.members).sort((a, b) => ['OWNER', 'MOD', 'MEMBER'].indexOf(a.role) - ['OWNER', 'MOD', 'MEMBER'].indexOf(b.role));
+    const members = listedMembers(view).sort((a, b) => ['OWNER', 'MOD', 'MEMBER'].indexOf(a.role) - ['OWNER', 'MOD', 'MEMBER'].indexOf(b.role));
     const isOwner = view.myRole === 'OWNER';
     const addMod = async (e: FormEvent) => {
       e.preventDefault();
@@ -244,7 +244,7 @@ export function SessionSettingsModal() {
     useEffect(() => {
       load();
     }, [channelId]);
-    const candidates = Object.values(view.members).filter((m) => m.user.id !== me.id && canModerate(view.myRole, m.role) && !bans.some((b) => b.user.id === m.user.id));
+    const candidates = listedMembers(view).filter((m) => m.user.id !== me.id && canModerate(view.myRole, m.role) && !bans.some((b) => b.user.id === m.user.id));
     if (!can(view.myRole, 'channel.ban')) return <p className="text-sm text-muted">No permission.</p>;
     return (
       <div className="space-y-4">

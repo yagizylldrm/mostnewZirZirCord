@@ -64,6 +64,9 @@ export async function rotateRefreshToken(refreshToken: string, deviceHash: strin
   return { userId: row.userId, ...(await issueTokens(row.userId, deviceHash)) };
 }
 
-export async function revokeRefreshToken(refreshToken: string) {
+/** Revokes a refresh token and returns the id of the user it belonged to (null if unknown). */
+export async function revokeRefreshToken(refreshToken: string): Promise<string | null> {
+  const row = await prisma.refreshToken.findUnique({ where: { tokenHash: sha256(refreshToken) }, select: { userId: true } });
   await prisma.refreshToken.deleteMany({ where: { tokenHash: sha256(refreshToken) } });
+  return row?.userId ?? null;
 }

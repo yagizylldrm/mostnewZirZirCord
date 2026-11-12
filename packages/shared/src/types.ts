@@ -15,6 +15,8 @@ export interface PublicUser {
   bannerColor: string;
   status: UserStatus;
   isGuest: boolean;
+  /** A closed guest account: kept only so its old messages still show a name. Hide it from member lists. */
+  isDeleted: boolean;
 }
 
 /** The signed-in user's own profile (includes private fields). */

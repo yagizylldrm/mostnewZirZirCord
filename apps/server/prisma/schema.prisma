@@ -68,6 +68,9 @@ model User {
   passwordHash    String?
   createdAt       DateTime   @default(now())
   lastSeenAt      DateTime   @default(now())
+  /// Set when a guest logs out or goes inactive but has messages others can still see:
+  /// the name stays for those messages, the account itself is closed.
+  deletedAt       DateTime?
 
   refreshTokens RefreshToken[]
   memberships   SessionMember[]

@@ -4,6 +4,7 @@ import { guestAuthSchema, loginSchema, refreshSchema, registerSchema, upgradeSch
 import type { AuthResponse } from '@zirzircord/shared';
 import { prisma } from '../lib/db';
 import { badRequest, conflict, unauthorized } from '../lib/errors';
+import { closeGuest } from '../lib/guests';
 import { toSelfUser } from '../lib/serializers';
 import { createUserWithPublicId } from '../lib/users';
 import { hashDevice, issueTokens, revokeRefreshToken, rotateRefreshToken } from './tokens';
@@ -65,7 +66,10 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post('/auth/logout', async (req) => {
     const body = (req.body ?? {}) as { refreshToken?: string };
-    if (body.refreshToken) await revokeRefreshToken(body.refreshToken);
+    if (typeof body.refreshToken !== 'string') return { ok: true };
+    const userId = await revokeRefreshToken(body.refreshToken);
+    // A guest has no password, so after logging out nobody can ever use the account again.
+    if (userId) await closeGuest(app, userId);
     return { ok: true };
   });
 }

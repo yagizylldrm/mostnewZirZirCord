@@ -1,4 +1,4 @@
-import { memberName } from '@zirzircord/client-core';
+import { listedMembers, memberName } from '@zirzircord/client-core';
 import { Crown, MicOff } from 'lucide-react';
 import { ui, useApp } from '../lib/zz';
 import { Avatar, RoleBadge, cx } from './ui';
@@ -7,10 +7,10 @@ export function MemberList() {
   const view = useApp((s) => s.sessions[s.activeSessionId!]);
   if (!view) return null;
   const order = new Map(view.presence.present.map((p, i) => [p.userId, i]));
-  const online = Object.values(view.members)
+  const online = listedMembers(view)
     .filter((m) => order.has(m.user.id))
     .sort((a, b) => order.get(a.user.id)! - order.get(b.user.id)!);
-  const offline = Object.values(view.members).filter((m) => !order.has(m.user.id));
+  const offline = listedMembers(view).filter((m) => !order.has(m.user.id));
 
   const row = (m: (typeof online)[number], present: boolean) => {
     const isHost = view.presence.hostId === m.user.id;
