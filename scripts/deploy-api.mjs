@@ -78,7 +78,8 @@ const apiUrl = `https://${domain}`;
 const serverEnv = {
   API_DOMAIN: domain,
   PUBLIC_API_URL: apiUrl,
-  CORS_ORIGINS: cfg.CORS_ORIGINS || 'https://zirzircord*.vercel.app,http://localhost:5173',
+  // localhost:14320 = the Tauri desktop app, which serves its UI from there.
+  CORS_ORIGINS: cfg.CORS_ORIGINS || 'https://zirzircord*.vercel.app,http://localhost:5173,http://localhost:14320',
   DATABASE_URL: cfg.DATABASE_URL,
   JWT_SECRET: cfg.JWT_SECRET,
   PRESENCE_GRACE_SECONDS: cfg.PRESENCE_GRACE_SECONDS || '30',
