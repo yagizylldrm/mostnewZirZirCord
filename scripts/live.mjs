@@ -131,7 +131,8 @@ function deployWeb(apiUrl) {
     JSON.stringify(
       {
         rewrites: [{ source: '/(.*)', destination: '/index.html' }],
-        headers: [{ source: '/assets/(.*)', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] }],
+        // Same security + cache headers as the Git-connected deploy (apps/web/vercel.json).
+        headers: JSON.parse(readFileSync(path.join(root, 'apps/web/vercel.json'), 'utf8')).headers,
       },
       null,
       2,

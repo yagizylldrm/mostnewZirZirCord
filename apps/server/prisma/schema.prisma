@@ -101,7 +101,8 @@ model Session {
   membersCanMentionEveryone Boolean      @default(false)
   createdAt                 DateTime     @default(now())
 
-  owner       User            @relation("SessionOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  // Restrict: deleting a user must hand ownership over first (see users/deletion.ts).
+  owner       User            @relation("SessionOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   members     SessionMember[]
   bans        SessionBan[]
   channels    Channel[]
@@ -197,7 +198,8 @@ model Sticker {
 model Message {
   id               String    @id @default(uuid()) @db.Uuid
   channelId        String    @db.Uuid
-  authorId         String    @db.Uuid
+  /// Null once the author deleted their account ("Deleted user").
+  authorId         String?   @db.Uuid
   content          String
   replyToId        String?   @db.Uuid
   mentions         String[]
@@ -206,7 +208,7 @@ model Message {
   editedAt         DateTime?
 
   channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  author      User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author      User?        @relation(fields: [authorId], references: [id], onDelete: SetNull)
   attachments Attachment[]
 
   @@index([channelId, createdAt])

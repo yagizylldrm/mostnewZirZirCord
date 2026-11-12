@@ -198,8 +198,8 @@ function Messages({ sessionId, channelId }: { sessionId: string; channelId: stri
         renderItem={({ item: m, index }) => {
           const prev = data[index + 1];
           const grouped = prev && prev.authorId === m.authorId && new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60_000;
-          const member = view?.members[m.authorId];
-          const color = member?.role === 'OWNER' ? C.owner : member?.role === 'MOD' ? C.mod : C.fg;
+          const member = m.authorId ? view?.members[m.authorId] : undefined;
+          const color = !m.authorId ? C.muted : member?.role === 'OWNER' ? C.owner : member?.role === 'MOD' ? C.mod : C.fg;
           return (
             <Pressable
               onLongPress={() => !m.pending && onLongPress(m)}

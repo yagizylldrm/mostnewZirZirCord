@@ -64,6 +64,15 @@ export async function rotateRefreshToken(refreshToken: string, deviceHash: strin
   return { userId: row.userId, ...(await issueTokens(row.userId, deviceHash)) };
 }
 
+/** The user a (valid, unexpired) refresh token belongs to, if any. */
+export async function findRefreshTokenOwner(refreshToken: string) {
+  const row = await prisma.refreshToken.findUnique({
+    where: { tokenHash: sha256(refreshToken) },
+    include: { user: { select: { id: true, isGuest: true } } },
+  });
+  return row && row.expiresAt > new Date() ? row.user : null;
+}
+
 export async function revokeRefreshToken(refreshToken: string) {
   await prisma.refreshToken.deleteMany({ where: { tokenHash: sha256(refreshToken) } });
 }

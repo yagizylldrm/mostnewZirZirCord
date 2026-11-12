@@ -18,7 +18,7 @@ import type { BanDTO, SetSessionListItem } from '@zirzircord/shared';
 import { prisma } from '../lib/db';
 import { badRequest, forbidden, notFound } from '../lib/errors';
 import { toMemberDTO, toPublicUser, toSessionDTO } from '../lib/serializers';
-import { kickFromRoom, roomName, setMicAllowed } from '../voice/livekit';
+import { kickFromSessionVoice, roomName, setMicAllowed } from '../voice/livekit';
 import type { FastifyInstance as App } from 'fastify';
 import { isSessionBanned, requireMember } from './access';
 import { rooms } from './hub';
@@ -68,15 +68,9 @@ export async function sessionRoutes(app: FastifyInstance) {
     if (m) app.io.to(rooms.session(sessionId)).emit('member:upsert', { sessionId, member: toMemberDTO(m) });
   }
 
-  /** Kicks a user from all voice rooms of a session. */
-  async function kickFromAllVoice(sessionId: string, userId: string) {
-    const voice = await prisma.channel.findMany({ where: { sessionId, type: 'VOICE' }, select: { id: true } });
-    await Promise.all(voice.map((c) => kickFromRoom(roomName(sessionId, c.id), userId)));
-  }
-
   // ------------------------------------------------------------- create/join
 
-  app.post('/sessions', auth, async (req) => {
+  app.post('/sessions', { ...auth, config: { rateLimit: { max: 20, timeWindow: '1 hour' } } }, async (req) => {
     const body = createSessionSchema.parse(req.body);
     const me = await prisma.user.findUniqueOrThrow({ where: { id: req.auth.userId } });
     if (body.isSet && me.isGuest) throw forbidden('Create an account to make set sessions', 'account_required');
@@ -289,7 +283,7 @@ export async function sessionRoutes(app: FastifyInstance) {
     if (!target) throw notFound('Member');
     if (!canModerate(actor.role, target.role)) throw forbidden('You cannot kick this member');
     app.io.to(rooms.user(userId)).emit('session:removed', { sessionId: id, reason: 'kicked' });
-    await kickFromAllVoice(id, userId);
+    await kickFromSessionVoice(id, userId);
     await hub().leave(id, userId);
     return { ok: true };
   });
@@ -338,7 +332,7 @@ export async function sessionRoutes(app: FastifyInstance) {
       update: { deviceHashes, reason: body.reason, bannedById: req.auth.userId },
     });
     app.io.to(rooms.user(user.id)).emit('session:removed', { sessionId: id, reason: 'banned' });
-    await kickFromAllVoice(id, user.id);
+    await kickFromSessionVoice(id, user.id);
     if (await hub().isPresent(id, user.id)) await hub().leave(id, user.id);
     if (targetMember) {
       await prisma.sessionMember.delete({ where: { sessionId_userId: { sessionId: id, userId: user.id } } });

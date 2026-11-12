@@ -4,6 +4,7 @@ import { prisma } from './lib/db';
 import { redis } from './lib/redis';
 import { ensureBucket } from './lib/storage';
 import { cleanupPendingUploads } from './uploads/routes';
+import { cleanupOfflineGuests } from './users/deletion';
 import { startVoiceSync } from './voice/sync';
 
 async function main() {
@@ -15,6 +16,14 @@ async function main() {
 
   const cleanup = setInterval(() => cleanupPendingUploads().catch((e) => app.log.warn(e)), 60 * 60 * 1000);
   cleanup.unref();
+
+  // Guests offline for GUEST_TTL_HOURS are deleted (checked every 15 min and at boot).
+  const sweepGuests = () =>
+    cleanupOfflineGuests(app)
+      .then((n) => n && app.log.info(`deleted ${n} offline guest account(s)`))
+      .catch((e) => app.log.warn(e));
+  setTimeout(sweepGuests, 60_000).unref();
+  setInterval(sweepGuests, 15 * 60 * 1000).unref();
 
   const shutdown = async () => {
     await app.close();

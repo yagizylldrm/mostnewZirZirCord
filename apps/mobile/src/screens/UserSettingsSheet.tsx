@@ -2,7 +2,8 @@ import { STATUSES, type UserStatus } from '@zirzircord/shared';
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
-import { Alert } from 'react-native';
+import { ActivityIndicator, Alert } from 'react-native';
+import { ApiError } from '@zirzircord/client-core';
 import { Avatar, Banner, Btn, Sheet, ToggleRow } from '../components/ui';
 import { C, s } from '../theme';
 import { SOUND_GROUPS, type SoundGroup } from '@zirzircord/client-core';
@@ -117,13 +118,81 @@ export function UserSettingsSheet({ visible, onClose }: { visible: boolean; onCl
         variant="danger"
         title={`Log out of ${me.displayName}`}
         onPress={() =>
-          Alert.alert(`Log out of ${me.displayName}?`, me.isGuest ? 'This is a guest account. You will lose it unless you create an account first.' : undefined, [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Log out', style: 'destructive', onPress: () => (onClose(), zz.logout()) },
-          ])
+          Alert.alert(
+            `Log out of ${me.displayName}?`,
+            me.isGuest
+              ? 'This is a guest account: logging out permanently deletes it, with its ID, roles and stickers. Your messages stay as "Deleted user". Create an account above to keep it.'
+              : 'You can sign back in any time.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: me.isGuest ? 'Log out & delete' : 'Log out', style: 'destructive', onPress: () => (onClose(), zz.logout()) },
+            ],
+          )
         }
       />
+      <DeleteAccount onDone={onClose} />
     </Sheet>
+  );
+}
+
+/** Danger zone: permanently delete this account (registered accounts confirm with their password). */
+function DeleteAccount({ onDone }: { onDone: () => void }) {
+  const me = useApp((st) => st.me!);
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await zz.deleteAccount(me.isGuest ? undefined : password);
+      onDone();
+      zz.notify('Your account was deleted', 'success');
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Something went wrong');
+      setBusy(false);
+    }
+  };
+  const confirm = () =>
+    Alert.alert('Delete account forever?', `${me.displayName} (${me.publicId}) will be deleted. This can't be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: run },
+    ]);
+
+  if (!open) return <Btn variant="secondary" title="Delete account…" onPress={() => setOpen(true)} />;
+  return (
+    <View style={[s.card, { gap: 8, borderWidth: 1, borderColor: C.danger }]}>
+      <Text style={[s.text, { color: C.danger, fontWeight: '700' }]}>Delete account</Text>
+      <Text style={s.muted}>
+        Deletes your profile, avatar, banner and stickers. Messages stay as "Deleted user"; sessions you own pass to the member who joined first.
+      </Text>
+      {!me.isGuest && (
+        <TextInput
+          style={s.input}
+          placeholder="Your password"
+          placeholderTextColor={C.faint}
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          autoCapitalize="none"
+        />
+      )}
+      {error && <Text style={{ color: C.danger }}>{error}</Text>}
+      {busy ? (
+        <ActivityIndicator color={C.danger} />
+      ) : (
+        <View style={[s.row, { gap: 8 }]}>
+          <View style={s.flex}>
+            <Btn variant="secondary" title="Cancel" onPress={() => (setOpen(false), setPassword(''), setError(null))} />
+          </View>
+          <View style={s.flex}>
+            <Btn variant="danger" title="Delete forever" onPress={confirm} disabled={!me.isGuest && !password} />
+          </View>
+        </View>
+      )}
+    </View>
   );
 }
 

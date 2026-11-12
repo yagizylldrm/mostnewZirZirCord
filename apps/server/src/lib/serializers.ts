@@ -81,7 +81,7 @@ export async function toAttachmentDTO(a: Attachment): Promise<AttachmentDTO> {
     filename: a.filename,
     mime: a.mime,
     size: a.size,
-    url: await presignGet(a.storageKey, { filename: a.filename }),
+    url: await presignGet(a.storageKey, { filename: a.filename, mime: a.mime }),
     thumbnailUrl: a.thumbnailKey ? await presignGet(a.thumbnailKey) : null,
     width: a.width,
     height: a.height,

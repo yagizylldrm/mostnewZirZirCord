@@ -12,6 +12,7 @@ import { rooms } from '../sessions/hub';
 
 const cid = z.object({ id: z.string().uuid() });
 const include = { attachments: true } as const;
+const THUMBNAIL_MAX_BYTES = 25 * 1024 * 1024;
 
 /**
  * Resolves mention tokens: keeps only real session members, and honours
@@ -136,7 +137,8 @@ export async function messageRoutes(app: FastifyInstance) {
     app.io.to(rooms.channel(id)).emit('message:new', dto);
 
     // Generate thumbnails in the background, then push the updated message.
-    const images = attachments.filter((a) => a.kind === 'IMAGE' && /^image\/(png|jpe?g|webp|gif|avif)$/.test(a.mime));
+    // Thumbnails are made in memory, so skip very large images (they're shown as-is).
+    const images = attachments.filter((a) => a.kind === 'IMAGE' && a.size <= THUMBNAIL_MAX_BYTES && /^image\/(png|jpe?g|webp|gif|avif)$/.test(a.mime));
     if (images.length) {
       void (async () => {
         for (const a of images) {

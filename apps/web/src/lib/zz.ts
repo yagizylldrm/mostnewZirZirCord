@@ -58,6 +58,8 @@ export type Modal =
   | { type: 'userSettings'; tab?: string }
   | { type: 'nickname' }
   | { type: 'notifications'; sessionId: string }
+  | { type: 'logout' }
+  | { type: 'deleteAccount' }
   | null;
 
 export interface UiState {

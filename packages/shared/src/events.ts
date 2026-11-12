@@ -30,6 +30,10 @@ export interface ServerToClientEvents {
   typing: (p: { channelId: string; userId: string }) => void;
   'voice:state': (p: { sessionId: string; channelId: string; participants: string[] }) => void;
   'user:updated': (u: PublicUser) => void;
+  /** A member of this session deleted their account: their messages now show as "Deleted user". */
+  'user:deleted': (p: { sessionId: string; userId: string }) => void;
+  /** Sent to the affected user only: their account was deleted (e.g. from another device). */
+  'account:deleted': (p: { userId: string }) => void;
 }
 
 /** Events clients send to the server. */

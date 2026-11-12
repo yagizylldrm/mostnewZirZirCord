@@ -7,12 +7,14 @@ import { useStore } from 'zustand';
 import { Avatar, Banner, Button, Field, Modal, Toggle, ToggleRow, cx, inputCls } from '../components/ui';
 import { sounds } from '../lib/sounds';
 import { copyText } from '../lib/format';
-import { call, closeModal, ui, useApp, useCall, useUi, zz } from '../lib/zz';
+import { call, closeModal, openModal, ui, useApp, useCall, useUi, zz } from '../lib/zz';
 
 type Tab = 'profile' | 'account' | 'voice' | 'sounds';
 
-export function UserSettingsModal() {
-  const [tab, setTab] = useState<Tab>('profile');
+const TABS: Tab[] = ['profile', 'account', 'voice', 'sounds'];
+
+export function UserSettingsModal({ initialTab }: { initialTab?: string }) {
+  const [tab, setTab] = useState<Tab>(TABS.includes(initialTab as Tab) ? (initialTab as Tab) : 'profile');
   return (
     <Modal title="User settings" onClose={closeModal} wide>
       <div className="flex flex-col gap-4 md:flex-row">
@@ -171,9 +173,20 @@ function Account() {
           {me.email}
         </div>
       )}
-      <Button variant="danger" onClick={() => (closeModal(), zz.logout())}>
+      <Button variant="secondary" onClick={() => openModal({ type: 'logout' })}>
         Log out
       </Button>
+      <div className="rounded-lg border border-danger/40 p-4">
+        <div className="font-semibold text-danger">Delete account</div>
+        <p className="mt-1 mb-3 text-sm text-muted">
+          Permanently deletes your profile, avatar, banner and stickers. Messages stay as “Deleted user”; sessions you own pass to the member who
+          joined first.
+          {me.isGuest && ' Guest accounts are also deleted automatically after 24 hours offline.'}
+        </p>
+        <Button variant="danger" onClick={() => openModal({ type: 'deleteAccount' })}>
+          Delete account…
+        </Button>
+      </div>
     </div>
   );
 }
