@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { MAX_STICKERS_PER_USER, createStickerSchema, stickerFromAttachmentSchema } from '@zirzircord/shared';
+import { MAX_STICKERS_PER_USER, PROFILE_IMAGE_MAX_BYTES, createStickerSchema, stickerFromAttachmentSchema } from '@zirzircord/shared';
 import { prisma } from '../lib/db';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { processImage } from '../lib/media';
@@ -53,6 +53,8 @@ export async function stickerRoutes(app: FastifyInstance) {
     if (!att?.sessionId || !att.messageId) throw notFound('Sticker');
     await requireMember(att.sessionId, req.auth.userId);
     if (att.kind !== 'STICKER' && att.kind !== 'IMAGE') throw badRequest('Only stickers and images can be saved as stickers');
+    // Never pull big files into memory (message images may be up to MAX_UPLOAD_MB).
+    if (att.size > PROFILE_IMAGE_MAX_BYTES) throw badRequest('That image is too large to become a sticker', 'too_large');
     // Re-process so images become proper stickers and size limits always hold.
     const img = await processImage(await getObjectBuffer(att.storageKey), 'sticker');
     return { sticker: await toStickerDTO(await storeSticker(req.auth.userId, img)) };

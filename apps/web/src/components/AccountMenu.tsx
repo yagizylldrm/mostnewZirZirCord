@@ -105,7 +105,7 @@ export function AccountMenu({ onClose }: { onClose: () => void }) {
             Add an account
           </button>
           <button
-            onClick={run(() => confirm(`Log out of ${me.displayName}?${me.isGuest ? '\n\nThis is a guest account: you will lose it unless you create an account first (Settings → Account).' : ''}`) && zz.logout())}
+            onClick={run(() => openModal({ type: 'logout' }))}
             className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-danger hover:bg-danger hover:text-white"
           >
             <LogOut size={15} className="ml-1.5" /> Log out of {me.displayName}

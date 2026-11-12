@@ -104,7 +104,9 @@ export const createAppStore = () =>
 export type AppStore = ReturnType<typeof createAppStore>;
 
 /** Display name of a member in a session (nickname wins). */
-export function memberName(view: SessionView | undefined, userId: string): string {
+/** Display name in a session. A null id is a message whose author deleted their account. */
+export function memberName(view: SessionView | undefined, userId: string | null): string {
+  if (!userId) return 'Deleted user';
   const m = view?.members[userId];
   return m?.nickname || m?.user.displayName || 'Unknown';
 }

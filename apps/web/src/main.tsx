@@ -1,3 +1,5 @@
+// Must stay the first import: configures zod before any schema is created.
+import './lib/zod-csp';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';

@@ -204,11 +204,13 @@ function MessageRow(p: {
   const view = useApp((s) => s.sessions[p.sessionId]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(p.m.content);
-  const author = view?.members[p.m.authorId];
-  const name = memberName(view, p.m.authorId);
-  const roleColor = author?.role === 'OWNER' ? 'text-owner' : author?.role === 'MOD' ? 'text-mod' : 'text-fg';
+  const authorId = p.m.authorId;
+  const author = authorId ? view?.members[authorId] : undefined;
+  const name = memberName(view, authorId);
+  const roleColor = !authorId ? 'text-muted italic' : author?.role === 'OWNER' ? 'text-owner' : author?.role === 'MOD' ? 'text-mod' : 'text-fg';
+  // Deleted users have no profile to open.
   const openProfile = (e: React.MouseEvent) =>
-    ui.setState({ profile: { userId: p.m.authorId, sessionId: p.sessionId, x: e.clientX, y: e.clientY } });
+    authorId && ui.setState({ profile: { userId: authorId, sessionId: p.sessionId, x: e.clientX, y: e.clientY } });
 
   const me = useApp((s) => s.me!.id);
   const mentionsMe = p.m.mentions.includes(me) || p.m.mentionsEveryone;
