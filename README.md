@@ -199,3 +199,16 @@ Voice quality depends on the server's bandwidth. Each listener receives every ac
 - **iOS screen sharing** needs the Broadcast Upload Extension described above.
 - **Android background calls.** A call keeps running while you switch apps briefly, but a long background call needs a foreground-service notification (e.g. with Notifee).
 - **Not built yet:** friends/DMs, reactions, push notifications, message search, end-to-end encryption.
+
+## Desktop app (Tauri)
+
+`apps/desktop-tauri` is the lightweight desktop shell (system WebView, no bundled Chromium).
+The older Electron shell in `apps/desktop` is kept for now.
+
+- **Develop:** `npm run dev:tauri` (starts the web dev server; the API must run on `localhost:4000`).
+- **Build locally:** `npm run dist:tauri:mac` / `npm run dist:tauri:win` on that OS. Set `VITE_API_URL` to the API you want baked in.
+- **Test voice with the bundled `.app`, not the bare binary:** macOS only exposes the microphone to an app bundle with an `Info.plist`.
+- **API CORS:** `CORS_ORIGINS` must include `http://localhost:14320` (the app serves its UI from there; `scripts/deploy-api.mjs` already does).
+- **Releases:** push a tag `desktop-v<version>` (matching `apps/desktop-tauri/src-tauri/tauri.conf.json`). `.github/workflows/desktop-release.yml` builds `.dmg` (Apple Silicon + Intel), Windows `.exe`, Linux `.AppImage`/`.deb` and attaches them to a draft GitHub Release; publish the draft to ship it. Installed apps check the latest release for updates on startup.
+- **One-time repo setup:** secret `TAURI_SIGNING_PRIVATE_KEY` (content of `~/.tauri/zirzircord.key`, the updater signing key — keep it safe, losing it breaks updates), optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and variable `VITE_API_URL`.
+- Builds are not code-signed: on macOS right-click → Open the first time; on Windows SmartScreen → More info → Run anyway. Voice calls on Linux (WebKitGTK) are experimental, and screen sharing is not available in this shell yet.
