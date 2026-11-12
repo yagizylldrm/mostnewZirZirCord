@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "zirzircord",
+      "credentials": [{ "accessKey": "zirzir", "secretKey": "zirzirsecret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

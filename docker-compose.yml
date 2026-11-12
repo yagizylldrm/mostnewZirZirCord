@@ -1,0 +1,45 @@
+# Local development infrastructure for ZirZirCord.
+# Start with: npm run infra:up
+name: zirzircord
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: zirzir
+      POSTGRES_PASSWORD: zirzir
+      POSTGRES_DB: zirzircord
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zirzir"]
+      interval: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  # S3-compatible object storage (files, images, voice messages, avatars)
+  storage:
+    image: chrislusf/seaweedfs:latest
+    command: server -dir=/data -s3 -s3.port=9000 -s3.config=/etc/seaweedfs/s3.json -master.volumeSizeLimitMB=1024
+    ports: ["9000:9000"]
+    volumes:
+      - storagedata:/data
+      - ./infra/seaweed-s3.json:/etc/seaweedfs/s3.json:ro
+
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.yaml --node-ip ${LIVEKIT_NODE_IP:-127.0.0.1}
+    ports:
+      - "7880:7880"        # signalling (WebSocket)
+      - "7881:7881"        # WebRTC over TCP (fallback)
+      - "7882:7882/udp"    # WebRTC over UDP (single muxed port)
+    volumes:
+      - ./infra/livekit.dev.yaml:/etc/livekit.yaml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  pgdata:
+  storagedata:

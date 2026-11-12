@@ -1,0 +1,8 @@
+**/node_modules
+**/dist
+**/dist-electron
+**/release
+apps/mobile
+apps/desktop
+.env
+infra/.env.prod

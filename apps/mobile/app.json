@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "ZirZirCord",
+    "slug": "zirzircord",
+    "scheme": "zirzircord",
+    "version": "0.1.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#111214",
+    "ios": {
+      "bundleIdentifier": "app.zirzircord.mobile",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "ZirZirCord uses the microphone for voice chat and voice messages.",
+        "NSCameraUsageDescription": "ZirZirCord uses the camera for video and to take photos to share.",
+        "NSPhotoLibraryUsageDescription": "ZirZirCord lets you share photos and videos.",
+        "UIBackgroundModes": ["audio", "voip"],
+        "NSAppTransportSecurity": { "NSAllowsLocalNetworking": true }
+      }
+    },
+    "android": {
+      "package": "app.zirzircord.mobile",
+      "adaptiveIcon": { "foregroundImage": "./assets/icon.png", "backgroundColor": "#111214" },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.WAKE_LOCK"
+      ]
+    },
+    "plugins": [
+      "expo-status-bar",
+      ["expo-audio", { "microphonePermission": "ZirZirCord uses the microphone for voice chat and voice messages." }],
+      ["expo-build-properties", { "android": { "usesCleartextTraffic": true, "minSdkVersion": 26 } }],
+      "expo-image",
+      ["expo-image-picker", { "photosPermission": "ZirZirCord lets you share photos and videos." }],
+      "@config-plugins/react-native-webrtc",
+      "@livekit/react-native-expo-plugin",
+      "./plugins/withScreenShare"
+    ],
+    "extra": {
+      "apiUrl": "http://localhost:4000"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+# LiveKit SFU – production. API keys come from the LIVEKIT_KEYS env var ("key: secret").
+port: 7880
+log_level: info
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50200
+  use_external_ip: true
+  # Congestion control keeps audio clean when someone's connection gets worse.
+  congestion_control:
+    enabled: true
+    allow_pause: true
+turn:
+  # Relays media for users behind strict NATs / firewalls.
+  enabled: true
+  udp_port: 3478
+room:
+  auto_create: true
+  empty_timeout: 60
+  max_participants: 0
+  enabled_codecs:
+    - mime: audio/opus
+    - mime: audio/red
+    - mime: video/vp9
+    - mime: video/av1
+    - mime: video/vp8
+    - mime: video/h264
+webhook:
+  urls:
+    - http://server:4000/webhooks/livekit

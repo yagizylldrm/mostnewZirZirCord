@@ -1,0 +1,87 @@
+{
+  "name": "@zirzircord/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ZirZirCord desktop app",
+  "author": "ZirZirCord",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "build:main": "tsup src/main.ts src/preload.ts --format cjs --platform node --target node22 --out-dir dist-electron --external electron --external uiohook-napi --clean",
+    "dev": "npm run build:main && node scripts/dev.mjs",
+    "build:web": "npm run build -w @zirzircord/web && rm -rf web && cp -R ../web/dist web",
+    "icons": "node scripts/icons.mjs",
+    "dist": "npm run build:main && npm run build:web && npm run icons && electron-builder",
+    "dist:mac": "npm run dist -- --mac",
+    "dist:win": "npm run dist -- --win",
+    "dist:linux": "npm run dist -- --linux",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "uiohook-napi": "^1.5.5"
+  },
+  "devDependencies": {
+    "electron": "45.2.1",
+    "electron-builder": "^26.18.0",
+    "tsup": "^8.5.0"
+  },
+  "build": {
+    "appId": "app.zirzircord.desktop",
+    "productName": "ZirZirCord",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist-electron/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "web",
+        "to": "web"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "ZirZirCord",
+        "schemes": [
+          "zirzircord"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.social-networking",
+      "target": [
+        "dmg"
+      ],
+      "icon": "build/icon.png",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "ZirZirCord needs the microphone for voice chat and voice messages.",
+        "NSCameraUsageDescription": "ZirZirCord needs the camera for video in voice channels.",
+        "NSScreenCaptureUsageDescription": "ZirZirCord needs screen recording permission to share your screen."
+      }
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "Network"
+    },
+    "electronVersion": "45.2.1"
+  }
+}

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffb02e"/>
+      <stop offset="1" stop-color="#ff5f3a"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="32" fill="url(#g)"/>
+  <!-- two stacked Z's that read as a zig-zag sound wave -->
+  <path d="M30 38h44L36 66h44" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M48 62h44L54 90h44" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,21 @@
+# Automatic HTTPS for all ZirZirCord endpoints. Point these DNS names at the server.
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:80
+}
+
+{$API_DOMAIN} {
+	reverse_proxy server:4000
+}
+
+{$LIVEKIT_DOMAIN} {
+	reverse_proxy livekit:7880
+}
+
+{$FILES_DOMAIN} {
+	# Keep the Host header: presigned URLs are signed for this hostname.
+	request_body {
+		max_size 2GB
+	}
+	reverse_proxy storage:9000
+}

@@ -1,0 +1,239 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ONLINE
+  IDLE
+  DND
+  INVISIBLE
+}
+
+enum Role {
+  OWNER
+  MOD
+  MEMBER
+}
+
+enum SessionState {
+  ACTIVE
+  DORMANT
+}
+
+enum ChannelType {
+  TEXT
+  VOICE
+}
+
+enum AttachmentKind {
+  IMAGE
+  VIDEO
+  AUDIO
+  FILE
+  VOICE_MESSAGE
+  STICKER
+}
+
+enum NotifyLevel {
+  ALL
+  MENTIONS
+  NONE
+}
+
+enum AudioPreset {
+  VOICE
+  HIGH
+  MUSIC
+}
+
+model User {
+  id              String     @id @default(uuid()) @db.Uuid
+  publicId        String     @unique
+  displayName     String
+  avatarKey       String?
+  avatarStaticKey String?
+  bannerKey       String?
+  bannerStaticKey String?
+  bio             String     @default("")
+  bannerColor     String     @default("#5865f2")
+  status          UserStatus @default(ONLINE)
+  isGuest         Boolean    @default(true)
+  email           String?    @unique
+  passwordHash    String?
+  createdAt       DateTime   @default(now())
+  lastSeenAt      DateTime   @default(now())
+
+  refreshTokens RefreshToken[]
+  memberships   SessionMember[]
+  ownedSessions Session[]       @relation("SessionOwner")
+  messages      Message[]
+  stickers      Sticker[]
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  deviceHash String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Session {
+  id                        String       @id @default(uuid()) @db.Uuid
+  code                      String       @unique
+  name                      String
+  ownerId                   String       @db.Uuid
+  isSet                     Boolean      @default(false)
+  state                     SessionState @default(ACTIVE)
+  membersCanCreateText      Boolean      @default(true)
+  membersCanCreateVoice     Boolean      @default(true)
+  accountsOnly              Boolean      @default(false)
+  membersCanMentionEveryone Boolean      @default(false)
+  createdAt                 DateTime     @default(now())
+
+  owner       User            @relation("SessionOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members     SessionMember[]
+  bans        SessionBan[]
+  channels    Channel[]
+  attachments Attachment[]
+}
+
+model SessionMember {
+  sessionId      String      @db.Uuid
+  userId         String      @db.Uuid
+  role           Role        @default(MEMBER)
+  nickname       String?
+  firstVisitedAt DateTime    @default(now())
+  lastVisitedAt  DateTime    @default(now())
+  notifyLevel    NotifyLevel @default(ALL)
+  mutedUntil     DateTime?
+  serverMuted    Boolean     @default(false)
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, userId])
+  @@index([userId])
+}
+
+model SessionBan {
+  id           String   @id @default(uuid()) @db.Uuid
+  sessionId    String   @db.Uuid
+  userId       String   @db.Uuid
+  deviceHashes String[]
+  reason       String?
+  bannedById   String   @db.Uuid
+  createdAt    DateTime @default(now())
+  session      Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+}
+
+model Channel {
+  id          String      @id @default(uuid()) @db.Uuid
+  sessionId   String      @db.Uuid
+  type        ChannelType
+  name        String
+  position    Int         @default(0)
+  createdById String?     @db.Uuid
+  audioPreset AudioPreset @default(HIGH)
+  userLimit   Int         @default(0)
+  createdAt   DateTime    @default(now())
+
+  session  Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messages Message[]
+  bans     ChannelBan[]
+  mutes    ChannelMute[]
+
+  @@index([sessionId])
+}
+
+model ChannelBan {
+  channelId  String   @db.Uuid
+  userId     String   @db.Uuid
+  reason     String?
+  bannedById String   @db.Uuid
+  createdAt  DateTime @default(now())
+  channel    Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([channelId, userId])
+}
+
+/// Per-user notification mute for one channel.
+model ChannelMute {
+  channelId  String    @db.Uuid
+  userId     String    @db.Uuid
+  mutedUntil DateTime?
+  channel    Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([channelId, userId])
+  @@index([userId])
+}
+
+/// A user's personal sticker collection (independent of sessions).
+model Sticker {
+  id         String   @id @default(uuid()) @db.Uuid
+  ownerId    String   @db.Uuid
+  storageKey String   @unique
+  width      Int
+  height     Int
+  animated   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+}
+
+model Message {
+  id               String    @id @default(uuid()) @db.Uuid
+  channelId        String    @db.Uuid
+  authorId         String    @db.Uuid
+  content          String
+  replyToId        String?   @db.Uuid
+  mentions         String[]
+  mentionsEveryone Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  editedAt         DateTime?
+
+  channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author      User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  attachments Attachment[]
+
+  @@index([channelId, createdAt])
+}
+
+/// Uploaded file. Starts "pending" (messageId null) until attached to a message.
+/// Avatars use sessionId null.
+model Attachment {
+  id           String         @id @default(uuid()) @db.Uuid
+  sessionId    String?        @db.Uuid
+  messageId    String?        @db.Uuid
+  uploaderId   String         @db.Uuid
+  kind         AttachmentKind
+  filename     String
+  mime         String
+  size         Int
+  storageKey   String         @unique
+  thumbnailKey String?
+  width        Int?
+  height       Int?
+  durationMs   Int?
+  waveform     Int[]
+  createdAt    DateTime       @default(now())
+
+  session Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  message Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([messageId])
+}

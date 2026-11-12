@@ -1,0 +1,38 @@
+{
+  "name": "zirzircord",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "apps/server",
+    "apps/web",
+    "apps/desktop"
+  ],
+  "scripts": {
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "db:migrate": "npm run db:migrate -w @zirzircord/server",
+    "dev": "concurrently -n server,web -c blue,magenta \"npm run dev -w @zirzircord/server\" \"npm run dev -w @zirzircord/web\"",
+    "dev:desktop": "npm run dev -w @zirzircord/desktop",
+    "build": "npm run build -w @zirzircord/server && npm run build -w @zirzircord/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "live": "node scripts/live.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "~5.9.3",
+    "@types/node": "^22.20.5"
+  },
+  "allowScripts": {
+    "argon2@0.45.2": true,
+    "esbuild@0.27.7": true,
+    "esbuild@0.28.2": true,
+    "prisma@6.19.3": true,
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "electron@45.2.1": true,
+    "electron-winstaller@5.4.0": true,
+    "uiohook-napi@1.5.5": true
+  }
+}

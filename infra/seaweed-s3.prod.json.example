@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "zirzircord",
+      "credentials": [{ "accessKey": "SAME_AS_S3_ACCESS_KEY", "secretKey": "SAME_AS_S3_SECRET_KEY" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}
