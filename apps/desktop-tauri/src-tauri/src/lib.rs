@@ -9,6 +9,9 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_deep_link::DeepLinkExt;
+use tauri::webview::{PermissionKind, PermissionResponse};
+#[cfg(not(dev))]
+use tauri_plugin_updater::UpdaterExt;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
 
 const MAIN: &str = "main";
@@ -100,8 +103,28 @@ fn create_main_window(app: &AppHandle) -> tauri::Result<()> {
         .inner_size(1280.0, 820.0)
         .min_inner_size(420.0, 500.0)
         .background_color(tauri::window::Color(0x11, 0x12, 0x14, 0xff))
+        // Only our own UI is ever loaded here, so grant what voice/video calls need
+        // (WebKitGTK on Linux and WebView2 on Windows otherwise prompt or deny).
+        .on_permission_request(|_wv, kind| match kind {
+            PermissionKind::Microphone | PermissionKind::Camera | PermissionKind::Notifications => {
+                PermissionResponse::Allow
+            }
+            _ => PermissionResponse::Default,
+        })
         .build()?;
     Ok(())
+}
+
+/// Checks GitHub Releases for a newer signed build and installs it; it takes effect on the
+/// next launch (Windows' passive installer restarts the app itself). Release builds only.
+#[cfg(not(dev))]
+fn check_for_update(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let Ok(updater) = app.updater() else { return };
+        if let Ok(Some(update)) = updater.check().await {
+            let _ = update.download_and_install(|_, _| {}, || {}).await;
+        }
+    });
 }
 
 fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -151,6 +174,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -182,6 +206,8 @@ pub fn run() {
             });
 
             create_main_window(&handle)?;
+            #[cfg(not(dev))]
+            check_for_update(handle.clone());
             setup_tray(&handle)?;
             Ok(())
         })
