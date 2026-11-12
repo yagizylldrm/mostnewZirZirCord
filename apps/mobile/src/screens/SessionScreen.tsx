@@ -1,5 +1,5 @@
 import { AudioSession, VideoView } from '@livekit/react-native';
-import { isChannelMuted, isSessionMuted, memberName, sessionUnread } from '@zirzircord/client-core';
+import { isChannelMuted, isSessionMuted, listedMembers, memberName, sessionUnread } from '@zirzircord/client-core';
 import { can, canCreateChannel, canModerate, formatSessionCode, isJumboEmoji, splitMentions, type MessageDTO } from '@zirzircord/shared';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useMemo, useState } from 'react';
@@ -442,8 +442,8 @@ function MembersTab({ sessionId }: { sessionId: string }) {
   const [selected, setSelected] = useState<string | null>(null);
   if (!view) return null;
   const order = new Map(view.presence.present.map((p, i) => [p.userId, i]));
-  const online = Object.values(view.members).filter((m) => order.has(m.user.id)).sort((a, b) => order.get(a.user.id)! - order.get(b.user.id)!);
-  const away = Object.values(view.members).filter((m) => !order.has(m.user.id));
+  const online = listedMembers(view).filter((m) => order.has(m.user.id)).sort((a, b) => order.get(a.user.id)! - order.get(b.user.id)!);
+  const away = listedMembers(view).filter((m) => !order.has(m.user.id));
   const row = (m: (typeof online)[number], present: boolean) => (
     <Pressable key={m.user.id} onPress={() => setSelected(m.user.id)} style={[s.row, { gap: 10, paddingVertical: 8, opacity: present ? 1 : 0.45 }]}>
       <Avatar name={memberName(view, m.user.id)} url={m.user.avatarUrl} staticUrl={m.user.avatarStaticUrl} size={36} status={present ? m.user.status : null} />

@@ -28,6 +28,7 @@ export function toPublicUser(u: User): PublicUser {
     bannerColor: u.bannerColor,
     status: u.status,
     isGuest: u.isGuest,
+    isDeleted: u.deletedAt !== null,
   };
 }
 

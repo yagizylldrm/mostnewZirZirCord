@@ -135,6 +135,16 @@ describe('account deletion', () => {
     expect(after.isSet).toBe(true);
   });
 
+  it('mods inherit before older members', async () => {
+    const owner = await (await mk().guest('Owner')).connect();
+    const oldest = await (await mk().guest('Oldest member')).connect();
+    const mod = await (await mk().guest('Mod')).connect();
+    const { s } = await sessionWith(owner, {}, oldest, mod);
+    expect((await owner.req('POST', `/sessions/${s.id}/mods`, { publicId: mod.publicId })).status).toBe(200);
+    expect((await owner.req('DELETE', '/me', {})).status).toBe(200);
+    expect((await prisma.session.findUniqueOrThrow({ where: { id: s.id } })).ownerId).toBe(mod.userId);
+  });
+
   it('a set session left with only guests goes to the oldest guest and becomes temporary', async () => {
     const owner = await (await registered('Set owner 2')).connect();
     const g1 = await (await mk().guest('Guest one')).connect();

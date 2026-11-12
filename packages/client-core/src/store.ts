@@ -111,6 +111,14 @@ export function memberName(view: SessionView | undefined, userId: string | null)
   return m?.nickname || m?.user.displayName || 'Unknown';
 }
 
+/**
+ * Members to show in lists, pickers and settings. Closed guest accounts stay in
+ * `view.members` only so their old messages keep a name (see memberName).
+ */
+export function listedMembers(view: SessionView) {
+  return Object.values(view.members).filter((m) => !m.user.isDeleted);
+}
+
 export function sortChannels(channels: ChannelDTO[]) {
   return [...channels].sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
 }

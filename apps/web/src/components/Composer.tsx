@@ -1,5 +1,5 @@
 import { LIMITS, canMentionEveryone, mentionToken } from '@zirzircord/shared';
-import { memberName, type OutgoingFile } from '@zirzircord/client-core';
+import { listedMembers, memberName, type OutgoingFile } from '@zirzircord/client-core';
 import type { MessageDTO } from '@zirzircord/shared';
 import { FileText, Mic, PlusCircle, Send, Smile, Square, Sticker, Trash2, X } from 'lucide-react';
 import { type ClipboardEvent, type DragEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -33,7 +33,7 @@ export function Composer(p: { sessionId: string; channelId: string; channelName:
   const suggestions = useMemo(() => {
     if (!suggest || !view) return [];
     const q = suggest.query.toLowerCase();
-    const people = Object.values(view.members)
+    const people = listedMembers(view)
       .filter((m) => m.user.id !== meId)
       .map((m) => ({ id: m.user.id, name: memberName(view, m.user.id), user: m.user }))
       .filter((m) => m.name.toLowerCase().includes(q))

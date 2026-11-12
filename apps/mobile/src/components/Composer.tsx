@@ -1,5 +1,5 @@
 import { LIMITS, canMentionEveryone, mentionToken } from '@zirzircord/shared';
-import { memberName, type OutgoingFile } from '@zirzircord/client-core';
+import { listedMembers, memberName, type OutgoingFile } from '@zirzircord/client-core';
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -30,7 +30,7 @@ export function Composer({ sessionId, channelId, channelName }: { sessionId: str
   const suggestions = useMemo(() => {
     if (query === undefined || !view) return [];
     const q = query.toLowerCase();
-    const people = Object.values(view.members)
+    const people = listedMembers(view)
       .filter((m) => m.user.id !== meId)
       .map((m) => ({ id: m.user.id, name: memberName(view, m.user.id), user: m.user as typeof m.user | null }))
       .filter((m) => m.name.toLowerCase().includes(q))

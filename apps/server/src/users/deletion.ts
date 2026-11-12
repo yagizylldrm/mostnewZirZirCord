@@ -13,19 +13,20 @@ interface Ctx {
 }
 
 /**
- * Hands a session owned by `userId` to the member who joined it first.
- * Set sessions prefer registered accounts; if only guests remain, the oldest
- * guest takes over and the session becomes temporary (guests can't own set
- * sessions). With nobody else left, the session is deleted.
+ * Hands a session owned by `userId` on: mods first, then the member who joined
+ * earliest. Set sessions prefer registered accounts; if only guests remain, the
+ * chosen guest takes over and the session becomes temporary (guests can't own
+ * set sessions). With nobody else left, the session is deleted.
  */
 async function handOverSession(ctx: Ctx, sessionId: string, userId: string) {
   const outcome = await withLock(`sess:${sessionId}`, async () => {
     const session = await prisma.session.findUnique({ where: { id: sessionId } });
     if (!session || session.ownerId !== userId) return null;
     const others = await prisma.sessionMember.findMany({
-      where: { sessionId, userId: { not: userId } },
+      // deletedAt: guests closed by an older server version (they only linger to name old messages).
+      where: { sessionId, userId: { not: userId }, user: { deletedAt: null } },
       include: { user: true },
-      orderBy: { firstVisitedAt: 'asc' },
+      orderBy: [{ role: 'asc' }, { firstVisitedAt: 'asc' }], // Role enum order OWNER, MOD, MEMBER → mods first
     });
     if (!others.length) return { deleted: true as const };
     const heir = (session.isSet && others.find((m) => !m.user.isGuest)) || others[0];
