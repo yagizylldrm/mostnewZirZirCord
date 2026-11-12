@@ -1,0 +1,42 @@
+# Always-on API on a small VM (e.g. Oracle Cloud Always Free, 1 GB RAM).
+# Database/files = Supabase, voice = LiveKit Cloud, website = Vercel.
+# Managed by scripts/deploy-api.mjs, which uploads this folder to ~/zirzircord and writes .env next to it.
+services:
+  redis:
+    image: redis:7-alpine
+    # Only locks and short-lived presence data live here; nothing needs to survive a restart.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb"]
+    restart: unless-stopped
+
+  api:
+    image: zirzircord-api:latest
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      REDIS_URL: redis://redis:6379
+      NODE_OPTIONS: --max-old-space-size=320
+    depends_on: [redis]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    ports: ["80:80", "443:443"]
+    environment:
+      API_DOMAIN: ${API_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api]
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

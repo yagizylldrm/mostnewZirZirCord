@@ -2,7 +2,8 @@ import { Redis } from 'ioredis';
 import { randomUUID } from 'node:crypto';
 import { env } from '../env';
 
-export const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 3 });
+// family: 0 resolves both IPv4 and IPv6, so private hostnames like *.railway.internal also work.
+export const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 3, family: 0 });
 
 const RELEASE_LUA = `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end`;
 

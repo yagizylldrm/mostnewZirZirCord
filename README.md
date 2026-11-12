@@ -111,7 +111,69 @@ No server needed. Database and files are on **Supabase**, voice is on **LiveKit 
 
 The command starts Redis, the API and the tunnel, then rebuilds and redeploys the website to Vercel pointing at the tunnel. The site stays online while it runs and the computer is awake. The tunnel address changes on each restart, which is why the command redeploys the website every time. Voice occupancy is polled from LiveKit, so no webhook setup is needed.
 
-For an always-on setup, run the same Docker image (`apps/server/Dockerfile`) on Railway/Render/a VPS with the same variables, or use a named Cloudflare Tunnel on your own domain.
+For an always-on setup, use Railway (below), run the same Docker image (`apps/server/Dockerfile`) on Render/a VPS with the same variables, or use a named Cloudflare Tunnel on your own domain.
+
+## Always-on API for free on Oracle Cloud (Supabase + LiveKit Cloud + Vercel)
+
+The API, Redis and Caddy (automatic HTTPS) run with Docker on an Oracle Cloud **Always Free** VM. The VM can be `VM.Standard.E2.1.Micro` (1 GB) or Ampere A1. The website stays on Vercel.
+
+**Requirements on the computer you deploy from:** Node 22+, Docker Desktop (running), `infra/.env.cloud` filled in, and an SSH key that the server accepts.
+
+**One-time server setup** (Ubuntu 24.04):
+
+- Add 2 GB of swap.
+- Open TCP 80 and 443 in two places: the subnet's security list, and the VM's own iptables (`/etc/iptables/rules.v4`).
+- Install Docker: `sudo apt install docker.io docker-compose-v2`.
+
+**Deploy or update the API:**
+
+```bash
+npm run deploy:api -- --host=ubuntu@<public-ip>   # first time; the host is remembered in .live/
+npm run deploy:api                                # later deploys
+```
+
+The script does the following:
+
+1. Builds the image locally for `linux/amd64`. Pass `--platform=linux/arm64` for an A1 VM.
+2. Streams the image to the VM over SSH and uploads `infra/oracle/`.
+3. Writes the server's `.env` from `infra/.env.cloud`.
+4. Starts everything and waits for `https://<ip-with-dashes>.sslip.io/health` to respond. sslip.io is a free hostname; set `API_DOMAIN` in `infra/.env.cloud` to use your own.
+
+**Then point the website at the API:**
+
+```bash
+npm install
+npm run deploy:web -- --api-url=https://<ip-with-dashes>.sslip.io
+```
+
+## Always-on API on Railway (Supabase + LiveKit Cloud + Vercel)
+
+The API runs on Railway, so the site no longer depends on your computer. `railway.json` already tells Railway to build `apps/server/Dockerfile`, check `/health`, and run one instance. Database migrations run when the container starts.
+
+1. On [railway.com](https://railway.com): **New Project → Deploy from GitHub repo** and pick this repository.
+2. In the same project: **+ Create → Database → Redis**.
+3. Open the API service → **Settings → Networking → Generate Domain**. You get an address like `https://zirzircord-api.up.railway.app`.
+4. Open the API service → **Variables** and add these. Use the same values as `infra/.env.cloud`:
+
+   | Variable | Value |
+   |---|---|
+   | `DATABASE_URL` | Supabase session pooler URL (port 5432) |
+   | `REDIS_URL` | `${{Redis.REDIS_URL}}` (Railway fills it in) |
+   | `JWT_SECRET` | the same value as before, so users stay signed in (`openssl rand -hex 48` for a new one) |
+   | `CORS_ORIGINS` | `https://zirzircord*.vercel.app,http://localhost:5173` |
+   | `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT` | the Supabase S3 endpoint (both the same) |
+   | `S3_REGION`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | from Supabase |
+   | `S3_BUCKET` | `zirzircord` |
+   | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | from LiveKit Cloud |
+
+   You don't need to set `PORT` or `PUBLIC_API_URL`. Railway sets `PORT`, and the API builds `PUBLIC_API_URL` from the generated domain. If you add a custom domain, set `PUBLIC_API_URL` to it.
+5. Once the deploy is healthy, point the website at it:
+   ```bash
+   npm run deploy:web -- --api-url=https://zirzircord-api.up.railway.app
+   ```
+   Run the same command again whenever you change the website.
+
+From now on, every push to `main` redeploys the API automatically. Mobile app: tap **Server** on the sign-in screen and enter the Railway address.
 
 ## Deploying to a VPS
 

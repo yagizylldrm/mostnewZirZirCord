@@ -25,5 +25,10 @@ const schema = z.object({
   LIVEKIT_API_SECRET: z.string(),
 });
 
-export const env = schema.parse(process.env);
+// On Railway, default the public URL to the service's generated domain.
+const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN;
+export const env = schema.parse({
+  ...process.env,
+  PUBLIC_API_URL: process.env.PUBLIC_API_URL || (railwayDomain ? `https://${railwayDomain}` : undefined),
+});
 export type Env = typeof env;

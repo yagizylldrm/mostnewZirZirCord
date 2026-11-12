@@ -17,7 +17,9 @@
     "build": "npm run build -w @zirzircord/server && npm run build -w @zirzircord/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "live": "node scripts/live.mjs"
+    "live": "node scripts/live.mjs",
+    "deploy:web": "node scripts/live.mjs --redeploy-web",
+    "deploy:api": "node scripts/deploy-api.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

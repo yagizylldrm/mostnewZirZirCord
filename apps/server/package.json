@@ -27,13 +27,13 @@
     "ioredis": "^5.11.1",
     "jose": "^6.2.15",
     "livekit-server-sdk": "^2.19.2",
+    "prisma": "~6.19.3",
     "sharp": "^0.35.5",
     "socket.io": "^4.8.4",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "dotenv-cli": "^10.0.0",
-    "prisma": "~6.19.3",
     "socket.io-client": "^4.8.4",
     "tsup": "^8.5.0",
     "tsx": "^4.23.15",

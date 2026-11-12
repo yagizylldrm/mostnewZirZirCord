@@ -1,0 +1,5 @@
+# HTTPS (Let's Encrypt) in front of the API. WebSockets (Socket.IO) are proxied automatically.
+{$API_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy api:4000
+}

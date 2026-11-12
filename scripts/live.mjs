@@ -158,9 +158,20 @@ function deployWeb(apiUrl) {
 const apiUrlFile = path.join(root, '.live/api-url');
 
 // `npm run live -- --redeploy-web`: push website changes without restarting the server/tunnel.
+// `npm run deploy:web -- --api-url=https://…`: deploy the website against a permanent API (e.g. Railway).
+const apiUrlArg = process.argv.find((a) => a.startsWith('--api-url='))?.slice('--api-url='.length);
 if (process.argv.includes('--redeploy-web')) {
-  if (!existsSync(apiUrlFile)) die('No running live session found (.live/api-url missing). Start one with: npm run live');
-  const url = readFileSync(apiUrlFile, 'utf8').trim();
+  let url;
+  if (apiUrlArg) {
+    try {
+      url = new URL(apiUrlArg).origin;
+    } catch {
+      die(`--api-url is not a valid URL: ${apiUrlArg}`);
+    }
+  } else {
+    if (!existsSync(apiUrlFile)) die('No running live session found (.live/api-url missing). Start one with: npm run live, or pass --api-url=https://…');
+    url = readFileSync(apiUrlFile, 'utf8').trim();
+  }
   const urls = deployWeb(url);
   log(`website redeployed → ${urls.join(' , ')} (API ${url})`);
   process.exit(0);
