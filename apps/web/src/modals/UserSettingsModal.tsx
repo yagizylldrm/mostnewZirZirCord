@@ -7,6 +7,7 @@ import { useStore } from 'zustand';
 import { Avatar, Banner, Button, Field, Modal, Toggle, ToggleRow, cx, inputCls } from '../components/ui';
 import { sounds } from '../lib/sounds';
 import { copyText } from '../lib/format';
+import { desktop } from '../lib/desktop';
 import { call, closeModal, ui, useApp, useCall, useUi, zz } from '../lib/zz';
 
 type Tab = 'profile' | 'account' | 'voice' | 'sounds';
@@ -203,7 +204,7 @@ function VoiceSettings() {
       try {
         localStorage.setItem('zz.pttKey', e.code);
       } catch {}
-      if (call.state.pttMode) window.zirzirDesktop?.setPttKey(e.code);
+      if (call.state.pttMode) desktop?.setPttKey(e.code);
       setBinding(false);
     };
     window.addEventListener('keydown', onKey, { once: true });
@@ -299,7 +300,7 @@ function VoiceSettings() {
       <div className="divide-y divide-line">
         <ToggleRow
           title="Push to talk"
-          desc={window.zirzirDesktop ? 'Works even when ZirZirCord is in the background.' : 'Works while this tab is focused. Use the desktop app for a global key.'}
+          desc={desktop ? 'Works even when ZirZirCord is in the background.' : 'Works while this tab is focused. Use the desktop app for a global key.'}
           checked={c.ptt}
           onChange={(v) => call.setPttMode(v)}
         />
