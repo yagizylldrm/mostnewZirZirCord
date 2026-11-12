@@ -100,7 +100,8 @@ export interface AttachmentDTO {
 export interface MessageDTO {
   id: string;
   channelId: string;
-  authorId: string;
+  /** Null when the author deleted their account ("Deleted user"). */
+  authorId: string | null;
   content: string;
   replyToId: string | null;
   /** User ids mentioned with <@id> tokens. */

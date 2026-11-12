@@ -45,13 +45,35 @@ export function presignPut(key: string, mime: string, size: number) {
   });
 }
 
-export function presignGet(key: string, opts: { filename?: string; inline?: boolean } = {}) {
-  const disposition = opts.filename
-    ? `${opts.inline === false ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(opts.filename)}`
-    : undefined;
-  return getSignedUrl(signer, new GetObjectCommand({ Bucket, Key: key, ResponseContentDisposition: disposition }), {
-    expiresIn: 6 * 60 * 60,
-  });
+/**
+ * Types a browser may render in place. Anything else (HTML, SVG, PDF, scripts…)
+ * is forced to download, so nobody can host a page on our storage domain.
+ */
+const INLINE_SAFE = new Set([
+  'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif',
+  'video/mp4', 'video/webm', 'video/quicktime',
+  'audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/ogg', 'audio/webm', 'audio/wav', 'audio/x-wav', 'audio/x-m4a', 'audio/flac',
+]);
+export const isInlineSafe = (mime: string) => INLINE_SAFE.has(mime.split(';')[0].trim().toLowerCase());
+
+/**
+ * Signed download URL. With `mime`, unsafe types are served as a download with a
+ * neutral content type; without it the stored type is used (our own WebP files).
+ */
+export function presignGet(key: string, opts: { filename?: string; mime?: string } = {}) {
+  const unsafe = opts.mime !== undefined && !isInlineSafe(opts.mime);
+  const name = opts.filename ? `; filename*=UTF-8''${encodeURIComponent(opts.filename)}` : '';
+  const disposition = unsafe ? `attachment${name}` : opts.filename ? `inline${name}` : undefined;
+  return getSignedUrl(
+    signer,
+    new GetObjectCommand({
+      Bucket,
+      Key: key,
+      ResponseContentDisposition: disposition,
+      ResponseContentType: unsafe ? 'application/octet-stream' : undefined,
+    }),
+    { expiresIn: 6 * 60 * 60 },
+  );
 }
 
 export async function headObject(key: string) {

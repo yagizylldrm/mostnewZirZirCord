@@ -24,8 +24,10 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
     .filter(Boolean)
     .map((p) => new RegExp(`^${p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*')}$`));
   // Desktop (Electron file://) and mobile apps send no/opaque origins.
+  // trustProxy (hop 0 only) = believe exactly one proxy hop (Caddy / cloudflared), so a client
+  // can't pick its own IP with a forged X-Forwarded-For and dodge rate limits.
   const originAllowed = (origin: string | undefined) => !origin || origin === 'null' || corsPatterns.some((re) => re.test(origin));
-  const app = Fastify({ logger: opts.logger ?? true, trustProxy: true, bodyLimit: 1024 * 1024 });
+  const app = Fastify({ logger: opts.logger ?? true, trustProxy: (_addr: string, hop: number) => hop === 0, bodyLimit: 1024 * 1024 });
 
   await app.register(helmet, { crossOriginResourcePolicy: { policy: 'cross-origin' } });
   await app.register(cors, {

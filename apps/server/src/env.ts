@@ -10,6 +10,11 @@ const schema = z.object({
   JWT_SECRET: z.string().min(32),
   PRESENCE_GRACE_SECONDS: z.coerce.number().min(0).default(30),
   MAX_UPLOAD_MB: z.coerce.number().positive().default(100),
+  /** Bytes a user may upload per rolling 24 h (abuse guard). */
+  UPLOAD_QUOTA_MB_GUEST: z.coerce.number().positive().default(300),
+  UPLOAD_QUOTA_MB_USER: z.coerce.number().positive().default(2000),
+  /** Guest accounts are deleted after being offline this long. */
+  GUEST_TTL_HOURS: z.coerce.number().positive().default(24),
   S3_ENDPOINT: z.string().url(),
   S3_PUBLIC_ENDPOINT: z.string().url(),
   S3_REGION: z.string().default('us-east-1'),

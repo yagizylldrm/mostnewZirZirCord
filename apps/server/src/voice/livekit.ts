@@ -1,5 +1,6 @@
 import { AccessToken, RoomServiceClient, TrackSource, WebhookReceiver } from 'livekit-server-sdk';
 import { env } from '../env';
+import { prisma } from '../lib/db';
 
 const httpUrl = env.LIVEKIT_URL.replace(/^ws/, 'http');
 export const roomService = new RoomServiceClient(httpUrl, env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET);
@@ -33,7 +34,9 @@ export async function createVoiceToken(opts: {
     identity: opts.userId,
     name: opts.name,
     metadata: JSON.stringify(opts.metadata),
-    ttl: '6h',
+    // Short-lived: the token is only needed to connect (LiveKit refreshes it for
+    // connected participants). A kicked/banned/muted user can't reuse an old one.
+    ttl: '10m',
   });
   at.addGrant({
     room: opts.room,
@@ -50,6 +53,12 @@ export async function createVoiceToken(opts: {
 /** Best-effort helpers: LiveKit being briefly unavailable must not break moderation. */
 export async function kickFromRoom(room: string, userId: string) {
   await roomService.removeParticipant(room, userId).catch(() => {});
+}
+
+/** Removes a user from every voice room of a session. */
+export async function kickFromSessionVoice(sessionId: string, userId: string) {
+  const voice = await prisma.channel.findMany({ where: { sessionId, type: 'VOICE' }, select: { id: true } });
+  await Promise.all(voice.map((c) => kickFromRoom(roomName(sessionId, c.id), userId)));
 }
 
 export async function deleteRoom(room: string) {
