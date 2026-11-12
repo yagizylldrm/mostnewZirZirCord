@@ -1,5 +1,5 @@
 import { can, canModerate, SCREEN_PRESETS, type ScreenPreset } from '@zirzircord/shared';
-import type { CallParticipant } from '@zirzircord/client-core';
+import { type CallParticipant, MAX_USER_VOLUME } from '@zirzircord/client-core';
 import { ChevronUp, Expand, Headphones, HeadphoneOff, MessageSquare, Mic, MicOff, MonitorUp, PhoneOff, Video, VideoOff, Volume2, Wifi } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { call, ui, useApp, useCall, zz } from '../lib/zz';
@@ -70,7 +70,7 @@ function Tile({ p, sessionId, big }: { p: CallParticipant; sessionId: string; bi
               <input
                 type="range"
                 min={0}
-                max={2}
+                max={MAX_USER_VOLUME}
                 step={0.05}
                 value={p.volume}
                 onChange={(e) => call.setUserVolume(p.id, Number(e.target.value))}

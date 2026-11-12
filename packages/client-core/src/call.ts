@@ -106,6 +106,16 @@ const quality = (q: ConnectionQuality): CallParticipant['quality'] =>
  * - adaptiveStream + dynacast → each viewer gets the resolution they render; unused layers are paused.
  * - VP9 SVC for screen share with VP8 backup codec for older devices.
  */
+/**
+ * Highest per-user volume this platform can play. On the web LiveKit plays remote
+ * audio through <audio> elements, whose `volume` only accepts 0–1: anything higher
+ * throws (WebKit: "IndexSizeError: The index is not in the allowed range") and
+ * would abort joining a call. React Native's native volume can boost up to 2×.
+ */
+export const MAX_USER_VOLUME = typeof navigator !== 'undefined' && navigator.product === 'ReactNative' ? 2 : 1;
+/** A saved/requested volume made safe to hand to LiveKit. */
+const playableVolume = (v: number) => (Number.isFinite(v) ? Math.min(Math.max(v, 0), MAX_USER_VOLUME) : 1);
+
 export class CallManager {
   readonly store = createStore<CallState>(() => ({
     status: 'idle',
@@ -362,7 +372,7 @@ export class CallManager {
   }
 
   private attachAudio(track: RemoteTrack, p: RemoteParticipant) {
-    const vol = this.state.deafened ? 0 : (this.volumes.get(p.identity) ?? 1);
+    const vol = this.state.deafened ? 0 : playableVolume(this.volumes.get(p.identity) ?? 1);
     if (track instanceof RemoteAudioTrack) {
       // Screen-share audio and mic both follow the participant's volume.
       p.setVolume(vol, track.source === Track.Source.ScreenShareAudio ? Track.Source.ScreenShareAudio : Track.Source.Microphone);
@@ -411,7 +421,7 @@ export class CallManager {
       cameraOn: p.isCameraEnabled,
       screenSharing: p.isScreenShareEnabled,
       quality: quality(p.connectionQuality),
-      volume: this.volumes.get(p.identity) ?? 1,
+      volume: playableVolume(this.volumes.get(p.identity) ?? 1),
       serverMuted: !micAllowed(p),
     }));
     this.set({ participants });
@@ -454,7 +464,7 @@ export class CallManager {
   private async setDeafened(deafened: boolean) {
     this.set({ deafened });
     for (const p of this.room?.remoteParticipants.values() ?? []) {
-      const v = deafened ? 0 : (this.volumes.get(p.identity) ?? 1);
+      const v = deafened ? 0 : playableVolume(this.volumes.get(p.identity) ?? 1);
       p.setVolume(v, Track.Source.Microphone);
       p.setVolume(v, Track.Source.ScreenShareAudio);
     }
@@ -475,7 +485,8 @@ export class CallManager {
     await this.muteMicTrack(!this.shouldTransmit());
   }
 
-  setUserVolume(identity: string, volume: number) {
+  setUserVolume(identity: string, requested: number) {
+    const volume = playableVolume(requested);
     this.volumes.set(identity, volume);
     this.savePrefs();
     const p = this.room?.remoteParticipants.get(identity);
