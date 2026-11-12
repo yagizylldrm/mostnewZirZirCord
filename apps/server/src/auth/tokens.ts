@@ -39,8 +39,34 @@ export async function verifyAccessToken(token: string): Promise<AuthContext> {
   }
 }
 
+/** Short cache so every request doesn't hit the DB; closed/deleted accounts stop working within seconds. */
+const activeCache = new Map<string, number>();
+export function forgetActiveUser(userId: string) {
+  activeCache.delete(userId);
+}
+export async function assertUserActive(userId: string) {
+  const until = activeCache.get(userId);
+  if (until && until > Date.now()) return;
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { deletedAt: true } });
+  if (!u || u.deletedAt) {
+    activeCache.delete(userId);
+    throw unauthorized('Session expired, please sign in again');
+  }
+  if (activeCache.size > 5000) activeCache.clear();
+  activeCache.set(userId, Date.now() + 10_000);
+}
+
 export async function issueTokens(userId: string, deviceHash: string) {
   const refreshToken = randomBytes(48).toString('base64url');
+  // Housekeeping: drop expired rows and keep at most 20 live tokens per user (oldest go first).
+  await prisma.refreshToken.deleteMany({ where: { userId, expiresAt: { lt: new Date() } } });
+  const stale = await prisma.refreshToken.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+    skip: 19,
+    select: { id: true },
+  });
+  if (stale.length) await prisma.refreshToken.deleteMany({ where: { id: { in: stale.map((r) => r.id) } } });
   await prisma.refreshToken.create({
     data: {
       userId,
@@ -60,7 +86,10 @@ export async function rotateRefreshToken(refreshToken: string, deviceHash: strin
     if (row) await prisma.refreshToken.delete({ where: { id: row.id } }).catch(() => {});
     throw unauthorized('Session expired, please sign in again');
   }
-  await prisma.refreshToken.delete({ where: { id: row.id } });
+  // Atomic consume: a concurrent second use of the same token must fail.
+  const consumed = await prisma.refreshToken.deleteMany({ where: { id: row.id } });
+  if (consumed.count !== 1) throw unauthorized('Session expired, please sign in again');
+  await assertUserActive(row.userId);
   return { userId: row.userId, ...(await issueTokens(row.userId, deviceHash)) };
 }
 

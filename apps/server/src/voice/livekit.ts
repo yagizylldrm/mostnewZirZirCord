@@ -43,7 +43,7 @@ export async function createVoiceToken(opts: {
     roomJoin: true,
     canPublish: true,
     canSubscribe: true,
-    canPublishData: true,
+    canPublishData: false,
     canUpdateOwnMetadata: false,
     canPublishSources: publishSources(opts.micAllowed),
   });
@@ -75,7 +75,7 @@ export async function setMicAllowed(room: string, userId: string, allowed: boole
       permission: {
         canSubscribe: true,
         canPublish: true,
-        canPublishData: true,
+        canPublishData: false,
         canPublishSources: publishSources(allowed),
       },
     })

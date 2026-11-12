@@ -29,7 +29,8 @@ export async function channelRoutes(app: FastifyInstance) {
 
   async function assertCanModerateUser(sessionId: string, actorRole: any, userId: string) {
     const target = await prisma.sessionMember.findUnique({ where: { sessionId_userId: { sessionId, userId } } });
-    if (!canModerate(actorRole, target?.role ?? null)) throw forbidden('You cannot moderate this member');
+    if (!target) throw badRequest('That user is not a member of this session', 'not_member');
+    if (!canModerate(actorRole, target.role)) throw forbidden('You cannot moderate this member');
   }
 
   app.post('/sessions/:id/channels', auth, async (req) => {

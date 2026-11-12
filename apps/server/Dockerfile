@@ -20,5 +20,6 @@ COPY --from=build /app/apps/server/dist ./apps/server/dist
 COPY --from=build /app/apps/server/prisma ./apps/server/prisma
 COPY --from=build /app/apps/server/package.json ./apps/server/package.json
 WORKDIR /app/apps/server
+USER node
 EXPOSE 4000
 CMD ["sh", "-c", "/app/node_modules/.bin/prisma migrate deploy && node dist/index.js"]

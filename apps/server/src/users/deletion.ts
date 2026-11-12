@@ -1,3 +1,4 @@
+import { forgetActiveUser } from '../auth/tokens';
 import { env } from '../env';
 import { prisma } from '../lib/db';
 import { withLock } from '../lib/redis';
@@ -92,6 +93,7 @@ export async function deleteUserAccount(ctx: Ctx, userId: string) {
   //    Session/channel bans are kept on purpose: their device hashes still block evasion.
   const sessionIds = (await prisma.sessionMember.findMany({ where: { userId }, select: { sessionId: true } })).map((m) => m.sessionId);
   await prisma.user.delete({ where: { id: userId } });
+  forgetActiveUser(userId);
   clearAccessCache();
 
   // 5. Tell everyone, then cut this user's live connections.

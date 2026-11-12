@@ -1,7 +1,7 @@
 import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
 import { HttpError } from '../lib/errors';
-import { verifyAccessToken } from '../auth/tokens';
+import { assertUserActive, verifyAccessToken } from '../auth/tokens';
 import { prisma } from '../lib/db';
 import { type IO, rooms, SessionHub } from '../sessions/hub';
 
@@ -31,6 +31,7 @@ export function createRealtime(httpServer: HttpServer, originAllowed: (origin: s
       const token = socket.handshake.auth?.token;
       if (typeof token !== 'string') throw new Error('missing token');
       const ctx = await verifyAccessToken(token);
+      await assertUserActive(ctx.userId);
       socket.data.userId = ctx.userId;
       socket.data.deviceHash = ctx.deviceHash;
       socket.data.sessions = new Set();
@@ -40,8 +41,24 @@ export function createRealtime(httpServer: HttpServer, originAllowed: (origin: s
     }
   });
 
-  io.on('connection', (socket) => {
+  const MAX_SOCKETS_PER_USER = 10;
+  io.on('connection', async (socket) => {
     const { userId } = socket.data;
+    if ((await io.in(rooms.user(userId)).fetchSockets()).length >= MAX_SOCKETS_PER_USER) {
+      socket.disconnect(true);
+      return;
+    }
+    // Simple per-socket token bucket for event flooding.
+    let tokens = 20;
+    let last = Date.now();
+    const allow = () => {
+      const now = Date.now();
+      tokens = Math.min(20, tokens + ((now - last) / 1000) * 5);
+      last = now;
+      if (tokens < 1) return false;
+      tokens -= 1;
+      return true;
+    };
     socket.join(rooms.user(userId));
 
     // Flood guard: a client sending more than MAX_EVENTS_PER_SECOND is cut off.
@@ -65,6 +82,7 @@ export function createRealtime(httpServer: HttpServer, originAllowed: (origin: s
 
     socket.on('session:enter', async (sessionId, ack) => {
       if (typeof ack !== 'function') return;
+      if (!allow()) return ack({ ok: false, error: 'rate_limited', message: 'Slow down' });
       try {
         const now = Date.now();
         while (enterTimes.length && now - enterTimes[0] > ENTER_WINDOW_MS) enterTimes.shift();
@@ -87,7 +105,7 @@ export function createRealtime(httpServer: HttpServer, originAllowed: (origin: s
     });
 
     socket.on('typing', (channelId) => {
-      if (typeof channelId !== 'string') return;
+      if (typeof channelId !== 'string' || !allow()) return;
       const now = Date.now();
       if (now - (lastTyping.get(channelId) ?? 0) < TYPING_INTERVAL_MS) return;
       lastTyping.set(channelId, now);

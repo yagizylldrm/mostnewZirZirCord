@@ -103,7 +103,8 @@ function setupMediaHandlers() {
     }
   });
 
-  ipcMain.on('screen-picker:choose', (_e, id: string | null, withAudio: boolean) => {
+  ipcMain.on('screen-picker:choose', (e, id: string | null, withAudio: boolean) => {
+    if (e.sender !== win?.webContents) return;
     const pending = pendingCapture;
     pendingCapture = null;
     if (!pending) return;
@@ -140,7 +141,8 @@ let pttKeycode: number | null = null;
 let pttDown = false;
 
 function setupPtt() {
-  ipcMain.on('ptt:set-key', (_e, code: string | null) => {
+  ipcMain.on('ptt:set-key', (e, code: string | null) => {
+    if (e.sender !== win?.webContents) return;
     if (!code) {
       pttKeycode = null;
       return;
@@ -205,7 +207,7 @@ function createWindow() {
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e, url) => {
-    if (DEV_URL && url.startsWith(DEV_URL)) return;
+    if (DEV_URL && new URL(url).origin === new URL(DEV_URL).origin) return;
     e.preventDefault();
     if (/^https?:/.test(url)) shell.openExternal(url);
   });
@@ -261,7 +263,9 @@ function createTray() {
 app.whenReady().then(() => {
   setupMediaHandlers();
   setupPtt();
-  ipcMain.on('badge', (_e, n: number) => app.setBadgeCount?.(n));
+  ipcMain.on('badge', (e, n: number) => {
+    if (e.sender === win?.webContents && Number.isFinite(n)) app.setBadgeCount?.(n);
+  });
   createWindow();
   if (!SMOKE) createTray();
   const link = process.argv.find((a) => a.startsWith(`${PROTOCOL}://`));
