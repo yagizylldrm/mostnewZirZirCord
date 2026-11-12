@@ -33,14 +33,14 @@ export async function createVoiceToken(opts: {
     identity: opts.userId,
     name: opts.name,
     metadata: JSON.stringify(opts.metadata),
-    ttl: '6h',
+    ttl: '10m',
   });
   at.addGrant({
     room: opts.room,
     roomJoin: true,
     canPublish: true,
     canSubscribe: true,
-    canPublishData: true,
+    canPublishData: false,
     canUpdateOwnMetadata: false,
     canPublishSources: publishSources(opts.micAllowed),
   });
@@ -66,7 +66,7 @@ export async function setMicAllowed(room: string, userId: string, allowed: boole
       permission: {
         canSubscribe: true,
         canPublish: true,
-        canPublishData: true,
+        canPublishData: false,
         canPublishSources: publishSources(allowed),
       },
     })

@@ -45,13 +45,29 @@ export function presignPut(key: string, mime: string, size: number) {
   });
 }
 
-export function presignGet(key: string, opts: { filename?: string; inline?: boolean } = {}) {
+/** MIME types that are safe to render inline (never HTML/SVG/XML/script). */
+const INLINE_SAFE = /^(image\/(png|jpeg|webp|gif|avif|bmp)|video\/(mp4|webm|quicktime|ogg)|audio\/(mpeg|mp3|ogg|webm|wav|x-wav|mp4|aac|x-m4a|flac|opus))$/i;
+
+/** Anything outside the safe set is stored as an opaque download so it can never run as a page. */
+export function safeMime(mime: string) {
+  const base = mime.split(';')[0].trim().toLowerCase();
+  return INLINE_SAFE.test(base) ? base : 'application/octet-stream';
+}
+
+export function presignGet(key: string, opts: { filename?: string; mime?: string } = {}) {
+  const mime = safeMime(opts.mime ?? 'image/webp');
+  const inline = mime !== 'application/octet-stream';
   const disposition = opts.filename
-    ? `${opts.inline === false ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(opts.filename)}`
-    : undefined;
-  return getSignedUrl(signer, new GetObjectCommand({ Bucket, Key: key, ResponseContentDisposition: disposition }), {
-    expiresIn: 6 * 60 * 60,
-  });
+    ? `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(opts.filename)}`
+    : inline
+      ? undefined
+      : 'attachment';
+  return getSignedUrl(
+    signer,
+    new GetObjectCommand({ Bucket, Key: key, ResponseContentDisposition: disposition, ResponseContentType: mime }),
+    // Short-lived: access can't be revoked, so keep the window small (clients refetch messages).
+    { expiresIn: 60 * 60 },
+  );
 }
 
 export async function headObject(key: string) {

@@ -129,20 +129,27 @@ export async function messageRoutes(app: FastifyInstance) {
       },
     });
     if (attachments.length) {
-      await prisma.attachment.updateMany({ where: { id: { in: attachments.map((a) => a.id) } }, data: { messageId: msg.id } });
+      const claimed = await prisma.attachment.updateMany({
+        where: { id: { in: attachments.map((a) => a.id) }, messageId: null },
+        data: { messageId: msg.id },
+      });
+      if (claimed.count !== attachments.length) {
+        await prisma.message.delete({ where: { id: msg.id } }).catch(() => {});
+        throw badRequest('Invalid attachment');
+      }
       attachments.forEach((a) => (a.messageId = msg.id));
     }
     const dto = { ...(await toMessageDTO({ ...msg, attachments })), nonce: body.nonce };
     app.io.to(rooms.channel(id)).emit('message:new', dto);
 
     // Generate thumbnails in the background, then push the updated message.
-    const images = attachments.filter((a) => a.kind === 'IMAGE' && /^image\/(png|jpe?g|webp|gif|avif)$/.test(a.mime));
+    const images = attachments.filter((a) => a.kind === 'IMAGE' && a.size <= 20 * 1024 * 1024 && /^image\/(png|jpe?g|webp|gif|avif)$/.test(a.mime));
     if (images.length) {
       void (async () => {
         for (const a of images) {
           try {
             const buf = await getObjectBuffer(a.storageKey);
-            const img = sharp(buf, { animated: false });
+            const img = sharp(buf, { animated: false, limitInputPixels: 80_000_000, sequentialRead: true });
             const meta = await img.metadata();
             const thumb = await img.rotate().resize({ width: 640, height: 640, fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toBuffer();
             const thumbnailKey = `${a.storageKey}.thumb.webp`;

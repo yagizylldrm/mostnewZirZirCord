@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import argon2 from 'argon2';
 import type { FastifyInstance } from 'fastify';
 import { guestAuthSchema, loginSchema, refreshSchema, registerSchema, upgradeSchema } from '@zirzircord/shared';
@@ -8,6 +9,23 @@ import { closeGuest } from '../lib/guests';
 import { toSelfUser } from '../lib/serializers';
 import { createUserWithPublicId } from '../lib/users';
 import { hashDevice, issueTokens, revokeRefreshToken, rotateRefreshToken } from './tokens';
+
+// Valid argon2id hash of a random string, only used to equalise timing for unknown emails.
+const DUMMY_HASH = argon2.hash(randomBytes(16).toString('hex'));
+
+// Per-account throttle on top of the per-IP limit (stops one IP-rotating attacker hammering one email).
+const loginFails = new Map<string, { n: number; reset: number }>();
+function loginBlocked(email: string) {
+  const e = loginFails.get(email);
+  return !!e && e.reset > Date.now() && e.n >= 10;
+}
+function noteLoginFail(email: string) {
+  const now = Date.now();
+  const e = loginFails.get(email);
+  if (!e || e.reset < now) loginFails.set(email, { n: 1, reset: now + 15 * 60_000 });
+  else e.n++;
+  if (loginFails.size > 10_000) loginFails.clear();
+}
 
 export async function authRoutes(app: FastifyInstance) {
   const limited = { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } };
@@ -35,8 +53,13 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post('/auth/login', limited, async (req): Promise<AuthResponse> => {
     const body = loginSchema.parse(req.body);
-    const user = await prisma.user.findUnique({ where: { email: body.email.toLowerCase() } });
-    if (!user?.passwordHash || !(await argon2.verify(user.passwordHash, body.password))) {
+    const email = body.email.toLowerCase();
+    if (loginBlocked(email)) throw badRequest('Too many attempts, try again in a few minutes', 'rate_limited');
+    const user = await prisma.user.findUnique({ where: { email } });
+    // Always run a verify so unknown emails take as long as wrong passwords.
+    const ok = await argon2.verify(user?.passwordHash ?? (await DUMMY_HASH), body.password).catch(() => false);
+    if (!user?.passwordHash || !ok) {
+      noteLoginFail(email);
       throw unauthorized('Wrong email or password');
     }
     const tokens = await issueTokens(user.id, hashDevice(body.deviceId));

@@ -4,7 +4,7 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
 import { ZodError } from 'zod';
 import { authRoutes } from './auth/routes';
-import { verifyAccessToken } from './auth/tokens';
+import { verifyAccessToken, assertUserActive } from './auth/tokens';
 import { channelRoutes } from './channels/routes';
 import { env } from './env';
 import { HttpError, unauthorized } from './lib/errors';
@@ -25,7 +25,9 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
     .map((p) => new RegExp(`^${p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*')}$`));
   // Desktop (Electron file://) and mobile apps send no/opaque origins.
   const originAllowed = (origin: string | undefined) => !origin || origin === 'null' || corsPatterns.some((re) => re.test(origin));
-  const app = Fastify({ logger: opts.logger ?? true, trustProxy: true, bodyLimit: 1024 * 1024 });
+  // A number means "trust that many proxy hops" (supported at runtime, missing from Fastify's typings).
+  const trustProxy = (/^\d+$/.test(env.TRUST_PROXY) ? Number(env.TRUST_PROXY) : env.TRUST_PROXY !== 'false') as unknown as boolean;
+  const app = Fastify({ logger: opts.logger ?? true, trustProxy, bodyLimit: 1024 * 1024 });
 
   await app.register(helmet, { crossOriginResourcePolicy: { policy: 'cross-origin' } });
   await app.register(cors, {
@@ -42,6 +44,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
     const header = req.headers.authorization;
     if (!header?.startsWith('Bearer ')) throw unauthorized();
     req.auth = await verifyAccessToken(header.slice(7));
+    await assertUserActive(req.auth.userId);
   });
 
   app.setErrorHandler((err, req, reply) => {

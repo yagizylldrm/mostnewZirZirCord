@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { rooms } from '../sessions/hub';
+import { forgetActiveUser } from '../auth/tokens';
 import { prisma } from './db';
 import { toMemberDTO, toSessionDTO } from './serializers';
 import { deleteKeys } from './storage';
@@ -23,6 +24,7 @@ export async function closeGuest(app: FastifyInstance, userId: string): Promise<
   const user = await prisma.user.findUnique({ where: { id: userId }, include: { stickers: true } });
   if (!user || !user.isGuest || user.deletedAt) return null;
 
+  forgetActiveUser(userId);
   // Other tabs/devices still holding a connection must not keep acting as this guest.
   app.io.in(rooms.user(userId)).disconnectSockets(true);
 

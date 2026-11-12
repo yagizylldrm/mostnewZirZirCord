@@ -6,7 +6,7 @@ import type { UploadTicket } from '@zirzircord/shared';
 import { env } from '../env';
 import { prisma } from '../lib/db';
 import { badRequest, forbidden } from '../lib/errors';
-import { deleteKeys, presignPut } from '../lib/storage';
+import { deleteKeys, presignPut, safeMime } from '../lib/storage';
 import { requireMember } from '../sessions/access';
 
 const sid = z.object({ id: z.string().uuid() });
@@ -26,8 +26,15 @@ export async function uploadRoutes(app: FastifyInstance) {
     const { id } = sid.parse(req.params);
     const body = createUploadSchema.parse(req.body);
     const m = await requireMember(id, req.auth.userId);
+    const pending = await prisma.attachment.aggregate({
+      where: { uploaderId: req.auth.userId, messageId: null },
+      _count: true,
+      _sum: { size: true },
+    });
+    if (pending._count >= 30 || (pending._sum.size ?? 0) > 500 * 1024 * 1024) throw badRequest('Too many pending uploads', 'too_many_uploads');
     if (m.session.state !== 'ACTIVE') throw forbidden('Session is not active');
     if (body.size > env.MAX_UPLOAD_MB * 1024 * 1024) throw badRequest(`Files can be at most ${env.MAX_UPLOAD_MB} MB`, 'too_large');
+    const mime = safeMime(body.mime);
     const attachmentId = randomUUID();
     const key = `sessions/${id}/${attachmentId}/${safeName(body.filename)}`;
     await prisma.attachment.create({
@@ -37,7 +44,7 @@ export async function uploadRoutes(app: FastifyInstance) {
         uploaderId: req.auth.userId,
         kind: body.kind,
         filename: body.filename.slice(0, 200),
-        mime: body.mime,
+        mime,
         size: body.size,
         storageKey: key,
         width: body.width,
@@ -46,7 +53,7 @@ export async function uploadRoutes(app: FastifyInstance) {
         waveform: body.waveform ?? [],
       },
     });
-    return { attachmentId, uploadUrl: await presignPut(key, body.mime, body.size), headers: { 'Content-Type': body.mime } };
+    return { attachmentId, uploadUrl: await presignPut(key, mime, body.size), headers: { 'Content-Type': mime } };
   });
 }
 

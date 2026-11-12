@@ -7,7 +7,7 @@ import { badRequest, conflict, notFound } from '../lib/errors';
 import { processImage } from '../lib/media';
 import { toStickerDTO } from '../lib/serializers';
 import { deleteKeys, getObjectBuffer, putObject } from '../lib/storage';
-import { requireMember } from '../sessions/access';
+import { requireChannelAccess, requireMember } from '../sessions/access';
 import { consumeMediaUpload } from '../users/routes';
 
 /** Saves processed sticker bytes into the user's collection. */
@@ -51,8 +51,12 @@ export async function stickerRoutes(app: FastifyInstance) {
     const { attachmentId } = stickerFromAttachmentSchema.parse(req.body);
     const att = await prisma.attachment.findUnique({ where: { id: attachmentId } });
     if (!att?.sessionId || !att.messageId) throw notFound('Sticker');
-    await requireMember(att.sessionId, req.auth.userId);
+    const msg = await prisma.message.findUnique({ where: { id: att.messageId }, select: { channelId: true } });
+    if (!msg) throw notFound('Sticker');
+    // Respects channel bans, not just session membership.
+    await requireChannelAccess(msg.channelId, req.auth.userId);
     if (att.kind !== 'STICKER' && att.kind !== 'IMAGE') throw badRequest('Only stickers and images can be saved as stickers');
+    if (att.size > 20 * 1024 * 1024) throw badRequest('Image is too large to save as a sticker');
     // Re-process so images become proper stickers and size limits always hold.
     const img = await processImage(await getObjectBuffer(att.storageKey), 'sticker');
     return { sticker: await toStickerDTO(await storeSticker(req.auth.userId, img)) };

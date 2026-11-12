@@ -4,6 +4,8 @@ const schema = z.object({
   NODE_ENV: z.string().default('development'),
   PORT: z.coerce.number().default(4000),
   PUBLIC_API_URL: z.string().url().default('http://localhost:4000'),
+  /** 'true' trusts X-Forwarded-For from any hop; set to the number of proxies (e.g. 1 for Caddy) when the API sits behind a known chain. */
+  TRUST_PROXY: z.string().default('true'),
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
   DATABASE_URL: z.string(),
   REDIS_URL: z.string().default('redis://localhost:6379'),

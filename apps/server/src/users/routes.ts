@@ -110,7 +110,7 @@ export async function userRoutes(app: FastifyInstance) {
   }
 
   /** Look someone up by their public id (e.g. to appoint a moderator or ban). */
-  app.get('/users/by-public-id/:publicId', { preHandler: app.authenticate }, async (req) => {
+  app.get('/users/by-public-id/:publicId', { preHandler: app.authenticate, config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req) => {
     const { publicId } = z.object({ publicId: z.string() }).parse(req.params);
     const user = await prisma.user.findUnique({ where: { publicId: publicId.toUpperCase().trim() } });
     if (!user) throw notFound('User');
