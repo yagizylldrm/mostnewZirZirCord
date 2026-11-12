@@ -4,14 +4,19 @@ const schema = z.object({
   NODE_ENV: z.string().default('development'),
   PORT: z.coerce.number().default(4000),
   PUBLIC_API_URL: z.string().url().default('http://localhost:4000'),
-  /** 'true' trusts X-Forwarded-For from any hop; set to the number of proxies (e.g. 1 for Caddy) when the API sits behind a known chain. */
-  TRUST_PROXY: z.string().default('true'),
+  /** Number of trusted proxy hops ('1' = one proxy such as Caddy or cloudflared). 'true' trusts every hop (spoofable X-Forwarded-For), 'false' trusts none. */
+  TRUST_PROXY: z.string().default('1'),
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
   DATABASE_URL: z.string(),
   REDIS_URL: z.string().default('redis://localhost:6379'),
   JWT_SECRET: z.string().min(32),
   PRESENCE_GRACE_SECONDS: z.coerce.number().min(0).default(30),
   MAX_UPLOAD_MB: z.coerce.number().positive().default(100),
+  /** Bytes a user may upload per rolling 24 h (abuse guard). */
+  UPLOAD_QUOTA_MB_GUEST: z.coerce.number().positive().default(300),
+  UPLOAD_QUOTA_MB_USER: z.coerce.number().positive().default(2000),
+  /** Guest accounts are deleted after being offline this long. */
+  GUEST_TTL_HOURS: z.coerce.number().positive().default(24),
   S3_ENDPOINT: z.string().url(),
   S3_PUBLIC_ENDPOINT: z.string().url(),
   S3_REGION: z.string().default('us-east-1'),

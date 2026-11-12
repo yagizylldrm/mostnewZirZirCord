@@ -243,6 +243,16 @@ export class ApiClient {
     else await this.setTokens(null);
   }
 
+  /**
+   * Permanently deletes the active account (password required for registered
+   * accounts), then forgets it on this device.
+   */
+  async deleteMe(password?: string) {
+    await this.request('DELETE', '/me', password ? { password } : {});
+    if (this.activeId) await this.removeAccount(this.activeId);
+    else await this.setTokens(null);
+  }
+
   // --------------------------------------------------------------- users
   async me() {
     return (await this.request<{ user: SelfUser }>('GET', '/me')).user;

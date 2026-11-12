@@ -15,13 +15,21 @@
         "NSMicrophoneUsageDescription": "ZirZirCord uses the microphone for voice chat and voice messages.",
         "NSCameraUsageDescription": "ZirZirCord uses the camera for video and to take photos to share.",
         "NSPhotoLibraryUsageDescription": "ZirZirCord lets you share photos and videos.",
-        "UIBackgroundModes": ["audio", "voip"],
-        "NSAppTransportSecurity": { "NSAllowsLocalNetworking": true }
+        "UIBackgroundModes": [
+          "audio",
+          "voip"
+        ],
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
       }
     },
     "android": {
       "package": "app.zirzircord.mobile",
-      "adaptiveIcon": { "foregroundImage": "./assets/icon.png", "backgroundColor": "#111214" },
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#111214"
+      },
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA",
@@ -36,13 +44,31 @@
     },
     "plugins": [
       "expo-status-bar",
-      ["expo-audio", { "microphonePermission": "ZirZirCord uses the microphone for voice chat and voice messages." }],
-      ["expo-build-properties", { "android": { "usesCleartextTraffic": true, "minSdkVersion": 26 } }],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "ZirZirCord uses the microphone for voice chat and voice messages."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ],
       "expo-image",
-      ["expo-image-picker", { "photosPermission": "ZirZirCord lets you share photos and videos." }],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ZirZirCord lets you share photos and videos."
+        }
+      ],
       "@config-plugins/react-native-webrtc",
       "@livekit/react-native-expo-plugin",
-      "./plugins/withScreenShare"
+      "./plugins/withScreenShare",
+      "expo-secure-store"
     ],
     "extra": {
       "apiUrl": "http://localhost:4000"

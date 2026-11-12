@@ -1,36 +1,25 @@
-import { randomBytes } from 'node:crypto';
 import argon2 from 'argon2';
 import type { FastifyInstance } from 'fastify';
 import { guestAuthSchema, loginSchema, refreshSchema, registerSchema, upgradeSchema } from '@zirzircord/shared';
 import type { AuthResponse } from '@zirzircord/shared';
 import { prisma } from '../lib/db';
-import { badRequest, conflict, unauthorized } from '../lib/errors';
-import { closeGuest } from '../lib/guests';
+import { HttpError, badRequest, conflict, unauthorized } from '../lib/errors';
+import { redis } from '../lib/redis';
+import { deleteUserAccount } from '../users/deletion';
 import { toSelfUser } from '../lib/serializers';
 import { createUserWithPublicId } from '../lib/users';
-import { hashDevice, issueTokens, revokeRefreshToken, rotateRefreshToken } from './tokens';
+import { findRefreshTokenOwner, hashDevice, issueTokens, revokeRefreshToken, rotateRefreshToken } from './tokens';
 
-// Valid argon2id hash of a random string, only used to equalise timing for unknown emails.
-const DUMMY_HASH = argon2.hash(randomBytes(16).toString('hex'));
-
-// Per-account throttle on top of the per-IP limit (stops one IP-rotating attacker hammering one email).
-const loginFails = new Map<string, { n: number; reset: number }>();
-function loginBlocked(email: string) {
-  const e = loginFails.get(email);
-  return !!e && e.reset > Date.now() && e.n >= 10;
-}
-function noteLoginFail(email: string) {
-  const now = Date.now();
-  const e = loginFails.get(email);
-  if (!e || e.reset < now) loginFails.set(email, { n: 1, reset: now + 15 * 60_000 });
-  else e.n++;
-  if (loginFails.size > 10_000) loginFails.clear();
-}
+/** Verified against for unknown emails, so a login takes the same time either way. */
+const DUMMY_HASH = argon2.hash('zirzircord-timing-equaliser');
+const LOGIN_MAX_FAILURES = 10;
+const LOGIN_LOCK_SECONDS = 15 * 60;
 
 export async function authRoutes(app: FastifyInstance) {
   const limited = { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } };
 
-  app.post('/auth/guest', limited, async (req): Promise<AuthResponse> => {
+  // Guests are free to make, so creating them is limited harder (ban evasion, spam).
+  app.post('/auth/guest', { config: { rateLimit: { max: 10, timeWindow: '1 hour' } } }, async (req): Promise<AuthResponse> => {
     const body = guestAuthSchema.parse(req.body);
     const user = await createUserWithPublicId({ displayName: body.displayName, isGuest: true });
     const tokens = await issueTokens(user.id, hashDevice(body.deviceId));
@@ -54,14 +43,18 @@ export async function authRoutes(app: FastifyInstance) {
   app.post('/auth/login', limited, async (req): Promise<AuthResponse> => {
     const body = loginSchema.parse(req.body);
     const email = body.email.toLowerCase();
-    if (loginBlocked(email)) throw badRequest('Too many attempts, try again in a few minutes', 'rate_limited');
+    // Per-account lockout on top of the per-IP limit (stops distributed guessing).
+    const failKey = `loginfail:${email}`;
+    if (Number(await redis.get(failKey)) >= LOGIN_MAX_FAILURES) {
+      throw new HttpError(429, 'too_many_attempts', 'Too many failed attempts. Try again in 15 minutes.');
+    }
     const user = await prisma.user.findUnique({ where: { email } });
-    // Always run a verify so unknown emails take as long as wrong passwords.
-    const ok = await argon2.verify(user?.passwordHash ?? (await DUMMY_HASH), body.password).catch(() => false);
+    const ok = await argon2.verify(user?.passwordHash ?? (await DUMMY_HASH), body.password);
     if (!user?.passwordHash || !ok) {
-      noteLoginFail(email);
+      await redis.multi().incr(failKey).expire(failKey, LOGIN_LOCK_SECONDS).exec();
       throw unauthorized('Wrong email or password');
     }
+    await redis.del(failKey);
     const tokens = await issueTokens(user.id, hashDevice(body.deviceId));
     return { ...tokens, user: toSelfUser(user) };
   });
@@ -89,10 +82,12 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post('/auth/logout', async (req) => {
     const body = (req.body ?? {}) as { refreshToken?: string };
-    if (typeof body.refreshToken !== 'string') return { ok: true };
-    const userId = await revokeRefreshToken(body.refreshToken);
-    // A guest has no password, so after logging out nobody can ever use the account again.
-    if (userId) await closeGuest(app, userId);
+    if (typeof body.refreshToken === 'string') {
+      // Guests have nothing to come back to: logging out deletes the guest account.
+      const owner = await findRefreshTokenOwner(body.refreshToken);
+      if (owner?.isGuest) await deleteUserAccount(app, owner.id);
+      else await revokeRefreshToken(body.refreshToken);
+    }
     return { ok: true };
   });
 }

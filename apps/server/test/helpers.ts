@@ -23,6 +23,12 @@ export class Client {
   socket?: TestSocket;
   events: Array<[string, any]> = [];
 
+  /**
+   * Each test client looks like its own machine behind the proxy (the server trusts
+   * exactly one hop), so per-IP limits like guest creation apply per client.
+   */
+  ip = `10.${rnd()}.${rnd()}.${rnd()}`;
+
   constructor(
     private base: string,
     public deviceId = `dev-${randomUUID()}`,
@@ -31,7 +37,11 @@ export class Client {
   async req<T = any>(method: string, path: string, body?: unknown): Promise<{ status: number; body: T }> {
     const res = await fetch(this.base + path, {
       method,
-      headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(this.token ? { authorization: `Bearer ${this.token}` } : {}) },
+      headers: {
+        'x-forwarded-for': this.ip,
+        ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+        ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
+      },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
     return { status: res.status, body: (await res.json().catch(() => null)) as T };
@@ -106,5 +116,7 @@ export class Client {
     this.socket?.disconnect();
   }
 }
+
+const rnd = () => Math.floor(Math.random() * 254) + 1;
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

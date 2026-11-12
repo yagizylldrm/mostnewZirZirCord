@@ -45,26 +45,36 @@ export function presignPut(key: string, mime: string, size: number) {
   });
 }
 
-/** MIME types that are safe to render inline (never HTML/SVG/XML/script). */
-const INLINE_SAFE = /^(image\/(png|jpeg|webp|gif|avif|bmp)|video\/(mp4|webm|quicktime|ogg)|audio\/(mpeg|mp3|ogg|webm|wav|x-wav|mp4|aac|x-m4a|flac|opus))$/i;
+/**
+ * Types a browser may render in place. Anything else (HTML, SVG, PDF, scripts…)
+ * is forced to download, so nobody can host a page on our storage domain.
+ */
+const INLINE_SAFE = new Set([
+  'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif',
+  'video/mp4', 'video/webm', 'video/quicktime',
+  'audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/ogg', 'audio/webm', 'audio/wav', 'audio/x-wav', 'audio/x-m4a', 'audio/flac',
+]);
+export const isInlineSafe = (mime: string) => INLINE_SAFE.has(mime.split(';')[0].trim().toLowerCase());
 
-/** Anything outside the safe set is stored as an opaque download so it can never run as a page. */
-export function safeMime(mime: string) {
-  const base = mime.split(';')[0].trim().toLowerCase();
-  return INLINE_SAFE.test(base) ? base : 'application/octet-stream';
-}
+/** Normalised MIME to store: unsafe types become an opaque download so they can never run as a page. */
+export const safeMime = (mime: string) => (isInlineSafe(mime) ? mime.split(';')[0].trim().toLowerCase() : 'application/octet-stream');
 
+/**
+ * Signed download URL. With `mime`, unsafe types are served as a download with a
+ * neutral content type; without it the stored type is used (our own WebP files).
+ */
 export function presignGet(key: string, opts: { filename?: string; mime?: string } = {}) {
-  const mime = safeMime(opts.mime ?? 'image/webp');
-  const inline = mime !== 'application/octet-stream';
-  const disposition = opts.filename
-    ? `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(opts.filename)}`
-    : inline
-      ? undefined
-      : 'attachment';
+  const unsafe = opts.mime !== undefined && !isInlineSafe(opts.mime);
+  const name = opts.filename ? `; filename*=UTF-8''${encodeURIComponent(opts.filename)}` : '';
+  const disposition = unsafe ? `attachment${name}` : opts.filename ? `inline${name}` : undefined;
   return getSignedUrl(
     signer,
-    new GetObjectCommand({ Bucket, Key: key, ResponseContentDisposition: disposition, ResponseContentType: mime }),
+    new GetObjectCommand({
+      Bucket,
+      Key: key,
+      ResponseContentDisposition: disposition,
+      ResponseContentType: unsafe ? 'application/octet-stream' : undefined,
+    }),
     // Short-lived: access can't be revoked, so keep the window small (clients refetch messages).
     { expiresIn: 60 * 60 },
   );

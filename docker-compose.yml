@@ -1,5 +1,7 @@
 # Local development infrastructure for ZirZirCord.
 # Start with: npm run infra:up
+# Databases and storage listen on 127.0.0.1 only, so nobody on the same Wi-Fi can reach
+# them (they use default passwords). LiveKit media ports stay open for phones on the LAN.
 name: zirzircord
 services:
   postgres:
@@ -23,7 +25,8 @@ services:
   storage:
     image: chrislusf/seaweedfs:latest
     command: server -dir=/data -s3 -s3.port=9000 -s3.config=/etc/seaweedfs/s3.json -master.volumeSizeLimitMB=1024
-    ports: ["127.0.0.1:9000:9000"]
+    # Phones on the LAN need storage too: set STORAGE_BIND=0.0.0.0 in .env while testing on one.
+    ports: ["${STORAGE_BIND:-127.0.0.1}:9000:9000"]
     volumes:
       - storagedata:/data
       - ./infra/seaweed-s3.json:/etc/seaweedfs/s3.json:ro

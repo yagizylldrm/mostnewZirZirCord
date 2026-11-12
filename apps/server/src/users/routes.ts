@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { mediaUploadSchema, updateProfileSchema } from '@zirzircord/shared';
+import argon2 from 'argon2';
+import { PROFILE_IMAGE_MAX_BYTES, deleteAccountSchema, mediaUploadSchema, updateProfileSchema } from '@zirzircord/shared';
 import { prisma } from '../lib/db';
-import { badRequest, notFound } from '../lib/errors';
+import { badRequest, forbidden, notFound } from '../lib/errors';
 import { processImage, type MediaKind } from '../lib/media';
 import { toPublicUser, toSelfUser } from '../lib/serializers';
 import { deleteKeys, getObjectBuffer, headObject, presignGet, presignPut, putObject } from '../lib/storage';
 import { rooms } from '../sessions/hub';
+import { assertUploadQuota } from '../uploads/routes';
+import { deleteUserAccount } from './deletion';
 
 const PREFIX: Record<MediaKind, string> = { avatar: 'avatars', banner: 'banners', sticker: 'sticker-uploads' };
 
@@ -22,6 +25,12 @@ export async function consumeMediaUpload(userId: string, uploadId: string, kind:
   }
   const head = await headObject(att.storageKey);
   if (!head) throw badRequest('Upload did not finish', 'upload_missing');
+  // Check the stored size before reading anything into memory: storage may not enforce the signed length.
+  if (head.size > PROFILE_IMAGE_MAX_BYTES || head.size !== att.size) {
+    await prisma.attachment.delete({ where: { id: att.id } }).catch(() => {});
+    await deleteKeys([att.storageKey]).catch(() => {});
+    throw badRequest('That image is too large', 'too_large');
+  }
   let processed;
   try {
     processed = await processImage(await getObjectBuffer(att.storageKey), kind);
@@ -85,9 +94,26 @@ export async function userRoutes(app: FastifyInstance) {
     return { user: toSelfUser(user) };
   });
 
+  /**
+   * Permanently deletes your account. Registered accounts confirm with their
+   * password. Messages stay as "Deleted user"; owned sessions are handed over.
+   */
+  app.delete('/me', { preHandler: app.authenticate, config: { rateLimit: { max: 10, timeWindow: '1 hour' } } }, async (req) => {
+    const { password } = deleteAccountSchema.parse(req.body ?? {});
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.auth.userId } });
+    if (!user.isGuest) {
+      if (!password || !user.passwordHash || !(await argon2.verify(user.passwordHash, password))) {
+        throw forbidden('Wrong password', 'wrong_password');
+      }
+    }
+    await deleteUserAccount(app, user.id);
+    return { ok: true };
+  });
+
   /** Step 1 of an avatar / banner / sticker upload: presigned PUT for the raw image. */
   app.post('/me/media-upload', { preHandler: app.authenticate }, async (req) => {
     const body = mediaUploadSchema.parse(req.body);
+    await assertUploadQuota(req.auth.userId, body.size);
     const id = randomUUID();
     const key = `${PREFIX[body.purpose]}/${req.auth.userId}/upload-${id}`;
     await prisma.attachment.create({

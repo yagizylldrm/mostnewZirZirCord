@@ -42,6 +42,11 @@ export const updateProfileSchema = z.object({
   bannerUploadId: z.string().uuid().nullable().optional(),
 });
 
+/** Registered accounts confirm with their password; guests send nothing. */
+export const deleteAccountSchema = z.object({
+  password: z.string().min(1).max(200).optional(),
+});
+
 export const mediaUploadSchema = z.object({
   purpose: z.enum(['avatar', 'banner', 'sticker']),
   mime: z.enum(PROFILE_IMAGE_MIMES),
@@ -120,7 +125,10 @@ export const editMessageSchema = z.object({
 
 export const createUploadSchema = z.object({
   filename: z.string().min(1).max(200),
-  mime: z.string().min(1).max(120),
+  mime: z
+    .string()
+    .max(120)
+    .regex(/^[\w.+-]+\/[\w.+-]+(\s*;\s*[\w.+-]+=[\w.+"-]+)*$/, 'Invalid file type'),
   size: z.number().int().positive(),
   kind: z.enum(ATTACHMENT_KINDS),
   width: z.number().int().positive().optional(),

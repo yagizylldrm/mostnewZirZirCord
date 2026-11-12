@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { createUploadSchema } from '@zirzircord/shared';
+import { ATTACHMENT_KINDS, createUploadSchema } from '@zirzircord/shared';
 import type { UploadTicket } from '@zirzircord/shared';
 import { env } from '../env';
 import { prisma } from '../lib/db';
-import { badRequest, forbidden } from '../lib/errors';
-import { deleteKeys, presignPut, safeMime } from '../lib/storage';
+import { HttpError, badRequest, forbidden } from '../lib/errors';
+import { deleteKeys, isInlineSafe, presignPut, safeMime } from '../lib/storage';
 import { requireMember } from '../sessions/access';
 
 const sid = z.object({ id: z.string().uuid() });
@@ -16,13 +16,44 @@ function safeName(name: string) {
   return cleaned || 'file';
 }
 
+/**
+ * Abuse guard: bytes a user may reserve per rolling 24 h. Counts every upload
+ * ticket (also unfinished ones), so a loop of huge uploads hits the wall fast.
+ */
+export async function assertUploadQuota(userId: string, size: number) {
+  const [user, used] = await Promise.all([
+    prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { isGuest: true } }),
+    prisma.attachment.aggregate({
+      where: { uploaderId: userId, createdAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+      _sum: { size: true },
+    }),
+  ]);
+  const limitMb = user.isGuest ? env.UPLOAD_QUOTA_MB_GUEST : env.UPLOAD_QUOTA_MB_USER;
+  if ((used._sum.size ?? 0) + size > limitMb * 1024 * 1024) {
+    throw new HttpError(
+      429,
+      'quota_exceeded',
+      user.isGuest
+        ? `Guests can upload up to ${limitMb} MB per day. Create an account for more.`
+        : `You can upload up to ${limitMb} MB per day.`,
+    );
+  }
+}
+
+/** Only types browsers may render inline keep a media kind; the rest are plain files. Stickers are server-made only. */
+function effectiveKind(kind: (typeof ATTACHMENT_KINDS)[number], mime: string) {
+  if (kind === 'FILE') return 'FILE';
+  if (kind === 'STICKER' || !isInlineSafe(mime)) return 'FILE';
+  return kind;
+}
+
 export async function uploadRoutes(app: FastifyInstance) {
   /**
    * Step 1 of an upload: reserve an attachment and get a presigned PUT URL.
    * Step 2: client PUTs the bytes directly to storage.
    * Step 3: client sends a message with the attachment id.
    */
-  app.post('/sessions/:id/uploads', { preHandler: app.authenticate }, async (req): Promise<UploadTicket> => {
+  app.post('/sessions/:id/uploads', { preHandler: app.authenticate, config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req): Promise<UploadTicket> => {
     const { id } = sid.parse(req.params);
     const body = createUploadSchema.parse(req.body);
     const m = await requireMember(id, req.auth.userId);
@@ -34,6 +65,7 @@ export async function uploadRoutes(app: FastifyInstance) {
     if (pending._count >= 30 || (pending._sum.size ?? 0) > 500 * 1024 * 1024) throw badRequest('Too many pending uploads', 'too_many_uploads');
     if (m.session.state !== 'ACTIVE') throw forbidden('Session is not active');
     if (body.size > env.MAX_UPLOAD_MB * 1024 * 1024) throw badRequest(`Files can be at most ${env.MAX_UPLOAD_MB} MB`, 'too_large');
+    await assertUploadQuota(req.auth.userId, body.size);
     const mime = safeMime(body.mime);
     const attachmentId = randomUUID();
     const key = `sessions/${id}/${attachmentId}/${safeName(body.filename)}`;
@@ -42,7 +74,7 @@ export async function uploadRoutes(app: FastifyInstance) {
         id: attachmentId,
         sessionId: id,
         uploaderId: req.auth.userId,
-        kind: body.kind,
+        kind: effectiveKind(body.kind, body.mime),
         filename: body.filename.slice(0, 200),
         mime,
         size: body.size,

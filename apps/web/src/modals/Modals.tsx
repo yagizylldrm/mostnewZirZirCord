@@ -1,4 +1,5 @@
 import { closeModal, useUi } from '../lib/zz';
+import { DeleteAccountModal, LogoutModal } from './AccountModals';
 import { ChannelModal } from './ChannelModal';
 import { NotificationSettingsModal } from './NotificationSettingsModal';
 import { CreateSessionModal, JoinSessionModal, NicknameModal } from './SessionModals';
@@ -24,7 +25,11 @@ export function Modals() {
     case 'sessionSettings':
       return <SessionSettingsModal />;
     case 'userSettings':
-      return <UserSettingsModal />;
+      return <UserSettingsModal key={modal.tab ?? 'profile'} initialTab={modal.tab} />;
+    case 'logout':
+      return <LogoutModal />;
+    case 'deleteAccount':
+      return <DeleteAccountModal />;
     default:
       closeModal();
       return null;

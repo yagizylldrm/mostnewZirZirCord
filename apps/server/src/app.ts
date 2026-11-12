@@ -24,9 +24,14 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
     .filter(Boolean)
     .map((p) => new RegExp(`^${p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*')}$`));
   // Desktop (Electron file://) and mobile apps send no/opaque origins.
+  // trustProxy (hop 0 only) = believe exactly one proxy hop (Caddy / cloudflared), so a client
+  // can't pick its own IP with a forged X-Forwarded-For and dodge rate limits.
   const originAllowed = (origin: string | undefined) => !origin || origin === 'null' || corsPatterns.some((re) => re.test(origin));
-  // A number means "trust that many proxy hops" (supported at runtime, missing from Fastify's typings).
-  const trustProxy = (/^\d+$/.test(env.TRUST_PROXY) ? Number(env.TRUST_PROXY) : env.TRUST_PROXY !== 'false') as unknown as boolean;
+  // A number N trusts the N nearest proxy hops. (Fastify's own numeric form does not honour
+  // X-Forwarded-For for N=1, so the same rule is written as a function.)
+  const trustProxy = /^\d+$/.test(env.TRUST_PROXY)
+    ? (_addr: string, hop: number) => hop < Number(env.TRUST_PROXY)
+    : env.TRUST_PROXY !== 'false';
   const app = Fastify({ logger: opts.logger ?? true, trustProxy, bodyLimit: 1024 * 1024 });
 
   await app.register(helmet, { crossOriginResourcePolicy: { policy: 'cross-origin' } });

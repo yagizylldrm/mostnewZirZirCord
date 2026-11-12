@@ -186,7 +186,11 @@ export class ZirZirClient {
       await this.loadCurrentAccount();
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        this.notify('That account was signed out. Please sign in again.', 'error');
+        const wasGuest = this.api.accounts().find((a) => a.id === userId)?.isGuest;
+        this.notify(
+          wasGuest ? 'That guest account was deleted after being offline for a day.' : 'That account was signed out. Please sign in again.',
+          'error',
+        );
         await this.api.removeAccount(userId);
         return this.afterAccountGone();
       }
@@ -200,6 +204,25 @@ export class ZirZirClient {
     await this.api.logout();
     await this.afterAccountGone();
   }
+
+  /**
+   * Permanently deletes the current account (registered accounts confirm with
+   * their password), then continues with another saved account if there is one.
+   * Throws (and stays signed in) when the password is wrong.
+   */
+  async deleteAccount(password?: string) {
+    this.deletingAccount = true; // the server's own 'account:deleted' echo is handled here, not by the listener
+    try {
+      await this.api.deleteMe(password);
+    } catch (e) {
+      this.deletingAccount = false;
+      throw e;
+    }
+    await this.teardown().catch(() => {});
+    this.deletingAccount = false;
+    await this.afterAccountGone();
+  }
+  private deletingAccount = false;
 
   private async afterAccountGone() {
     const next = this.api.accounts()[0];
@@ -313,6 +336,29 @@ export class ZirZirClient {
       updateView(sessionId, (v) => ({ members: { ...v.members, [member.user.id]: member } }));
       if (member.user.id === this.state.me?.id) updateView(sessionId, () => ({ myRole: member.role }));
     });
+    // Our account was deleted (e.g. from another device): forget it here too.
+    socket.on('account:deleted', ({ userId }) => {
+      if (userId !== this.state.me?.id || this.deletingAccount) return;
+      void (async () => {
+        await this.teardown().catch(() => {});
+        await this.api.removeAccount(userId);
+        this.notify('This account was deleted.', 'info');
+        await this.afterAccountGone();
+      })();
+    });
+    // Someone deleted their account: loaded messages from them become "Deleted user".
+    socket.on('user:deleted', ({ userId }) =>
+      this.set((s) => {
+        let changed = false;
+        const messages = { ...s.messages };
+        for (const [cid, cm] of Object.entries(s.messages)) {
+          if (!cm.items.some((m) => m.authorId === userId)) continue;
+          changed = true;
+          messages[cid] = { ...cm, items: cm.items.map((m) => (m.authorId === userId ? { ...m, authorId: null } : m)) };
+        }
+        return changed ? { messages } : {};
+      }),
+    );
     socket.on('member:removed', ({ sessionId, userId }) =>
       updateView(sessionId, (v) => {
         const members = { ...v.members };
@@ -382,7 +428,7 @@ export class ZirZirClient {
       // If the realtime copy already arrived, drop the duplicate.
       if (local !== -1) items = items.filter((x, i) => i === local || x.id !== m.id);
       const typing = { ...s.typing[m.channelId] };
-      delete typing[m.authorId];
+      if (m.authorId) delete typing[m.authorId];
       return { messages: { ...s.messages, [m.channelId]: { ...cm, items } }, typing: { ...s.typing, [m.channelId]: typing } };
     });
   }
@@ -508,7 +554,7 @@ export class ZirZirClient {
     if (isSessionMuted(st, sessionId) || isChannelMuted(st, sessionId, m.channelId) || level === 'NONE') return;
     if (level === 'MENTIONS' && !isMention) return;
     this.onSound(isMention ? 'mention' : 'message');
-    const author = view.members[m.authorId];
+    const author = m.authorId ? view.members[m.authorId] : undefined;
     const text = m.content
       ? mentionsToText(m.content, view)
       : m.attachments[0]?.kind === 'STICKER'

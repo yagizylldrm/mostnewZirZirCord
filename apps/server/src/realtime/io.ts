@@ -11,6 +11,12 @@ function toAckError(err: unknown) {
   return { ok: false as const, error: 'internal', message: 'Something went wrong' };
 }
 
+/** Per-socket limits: realtime events bypass the HTTP rate limiter. */
+const MAX_EVENTS_PER_SECOND = 50;
+const ENTER_MAX = 10;
+const ENTER_WINDOW_MS = 10_000;
+const TYPING_INTERVAL_MS = 2_000;
+
 export function createRealtime(httpServer: HttpServer, originAllowed: (origin: string | undefined) => boolean) {
   const io: IO = new Server(httpServer, {
     cors: { origin: (origin, cb) => cb(null, originAllowed(origin)), credentials: true },
@@ -54,12 +60,34 @@ export function createRealtime(httpServer: HttpServer, originAllowed: (origin: s
       return true;
     };
     socket.join(rooms.user(userId));
+
+    // Flood guard: a client sending more than MAX_EVENTS_PER_SECOND is cut off.
+    let windowStart = Date.now();
+    let eventsInWindow = 0;
+    socket.use((_packet, next) => {
+      const now = Date.now();
+      if (now - windowStart >= 1000) {
+        windowStart = now;
+        eventsInWindow = 0;
+      }
+      if (++eventsInWindow > MAX_EVENTS_PER_SECOND) {
+        socket.disconnect(true);
+        return;
+      }
+      next();
+    });
+    const enterTimes: number[] = [];
+    const lastTyping = new Map<string, number>();
     prisma.user.update({ where: { id: userId }, data: { lastSeenAt: new Date() } }).catch(() => {});
 
     socket.on('session:enter', async (sessionId, ack) => {
       if (typeof ack !== 'function') return;
       if (!allow()) return ack({ ok: false, error: 'rate_limited', message: 'Slow down' });
       try {
+        const now = Date.now();
+        while (enterTimes.length && now - enterTimes[0] > ENTER_WINDOW_MS) enterTimes.shift();
+        if (enterTimes.length >= ENTER_MAX) throw new HttpError(429, 'rate_limited', 'Too many attempts, slow down');
+        enterTimes.push(now);
         if (typeof sessionId !== 'string') throw new HttpError(400, 'bad_request', 'sessionId required');
         ack({ ok: true, data: await hub.enter(sessionId, userId, socket.data.deviceHash, socket.id) });
       } catch (err) {
@@ -78,11 +106,18 @@ export function createRealtime(httpServer: HttpServer, originAllowed: (origin: s
 
     socket.on('typing', (channelId) => {
       if (typeof channelId !== 'string' || !allow()) return;
+      const now = Date.now();
+      if (now - (lastTyping.get(channelId) ?? 0) < TYPING_INTERVAL_MS) return;
+      lastTyping.set(channelId, now);
+      if (lastTyping.size > 200) lastTyping.clear();
       const room = rooms.channel(channelId);
       if (socket.rooms.has(room)) socket.to(room).emit('typing', { channelId, userId });
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
+      // Offline time (guest expiry) counts from the moment the last connection closes.
+      const remaining = await io.in(rooms.user(userId)).fetchSockets().catch(() => []);
+      if (!remaining.length) prisma.user.update({ where: { id: userId }, data: { lastSeenAt: new Date() } }).catch(() => {});
       for (const sessionId of socket.data.sessions) {
         hub.socketGone(sessionId, userId, socket.id).catch((e) => console.error('[socket] socketGone', e));
       }
