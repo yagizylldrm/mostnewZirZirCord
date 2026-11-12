@@ -16,12 +16,15 @@ import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const envFile = path.join(root, 'infra/.env.cloud');
-const stage = path.join(root, '.live/web');
+// Staged outside the git repo on purpose: inside it, the Vercel CLI attaches the last commit's
+// author, and Vercel Hobby blocks deployments whose author isn't the project owner.
+const stage = path.join(os.homedir(), '.zirzircord-vercel-web');
 const VERCEL_PROJECT = 'zirzircord';
 const PORT = 4000;
 const skipWeb = process.argv.includes('--no-web');
@@ -145,10 +148,10 @@ function deployWeb(apiUrl) {
     } catch {
       /* already exists */
     }
-    vercel(['link', '--yes', '--project', VERCEL_PROJECT, '--cwd', stage]);
+    vercel(['link', '--yes', '--project', VERCEL_PROJECT, '--cwd', stage], { cwd: stage });
   }
   log('deploying website to Vercel…');
-  const out = vercel(['deploy', '--prod', '--yes', '--cwd', stage]);
+  const out = vercel(['deploy', '--prod', '--yes', '--cwd', stage], { cwd: stage });
   const urls = [...new Set(out.match(/https:\/\/[a-z0-9.-]+\.vercel\.app/g) ?? [])];
   return urls;
 }
@@ -172,7 +175,13 @@ if (process.argv.includes('--redeploy-web')) {
     if (!existsSync(apiUrlFile)) die('No running live session found (.live/api-url missing). Start one with: npm run live, or pass --api-url=https://…');
     url = readFileSync(apiUrlFile, 'utf8').trim();
   }
-  const urls = deployWeb(url);
+  let urls;
+  try {
+    urls = deployWeb(url);
+  } catch (e) {
+    console.error(e.stderr?.toString() || e.stdout?.toString() || e.message);
+    die('Vercel deploy failed (are you logged in? npx vercel@latest login)');
+  }
   log(`website redeployed → ${urls.join(' , ')} (API ${url})`);
   process.exit(0);
 }
