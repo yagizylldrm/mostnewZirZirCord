@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { type ReactNode, useEffect, useRef } from 'react';
-import { ActivityIndicator, Animated, Easing, Modal, Pressable, ScrollView, Switch, Text, View, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Animated, Easing, Modal, Platform, Pressable, ScrollView, Switch, Text, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, colorFor, initials, s } from '../theme';
 import { useApp, zz } from '../zz';
@@ -122,7 +122,8 @@ export function Sheet({ visible, title, onClose, children }: { visible: boolean;
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: C.main, paddingTop: 12 }}>
+      {/* Android draws the modal edge to edge (under the status bar); iOS sheets have their own inset. */}
+      <View style={{ flex: 1, backgroundColor: C.main, paddingTop: 12 + (Platform.OS === 'android' ? insets.top : 0) }}>
         <View style={[s.row, { paddingHorizontal: 16, paddingBottom: 8 }]}>
           <Text style={[s.h2, s.flex]}>{title}</Text>
           <Pressable onPress={onClose} hitSlop={12}>

@@ -1,4 +1,4 @@
-import { LIMITS, canMentionEveryone, mentionToken } from '@zirzircord/shared';
+import { LIMITS, canMentionEveryone, mentionToken, parseFormat } from '@zirzircord/shared';
 import { listedMembers, memberName, type OutgoingFile } from '@zirzircord/client-core';
 import type { MessageDTO } from '@zirzircord/shared';
 import { FileText, Mic, PlusCircle, Send, Smile, Square, Sticker, Trash2, X } from 'lucide-react';
@@ -7,11 +7,14 @@ import { formatBytes, formatDuration } from '../lib/format';
 import { VoiceRecorder, fileToOutgoing } from '../lib/media';
 import { useApp, zz } from '../lib/zz';
 import { EmojiPicker } from './EmojiPicker';
+import { FormattedText } from './FormattedText';
 import { StickerPanel } from './StickerPanel';
 import { Avatar, IconButton, cx } from './ui';
 
 export function Composer(p: { sessionId: string; channelId: string; channelName: string; replyTo: MessageDTO | null; onClearReply: () => void }) {
   const [text, setText] = useState('');
+  // Live preview: only shown while the draft actually uses formatting (not for plain text or bare links).
+  const hasFormatting = useMemo(() => parseFormat(text).some((n) => n.type !== 'text' && n.type !== 'url'), [text]);
   const [files, setFiles] = useState<OutgoingFile[]>([]);
   const [sending, setSending] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -194,6 +197,12 @@ export function Composer(p: { sessionId: string; channelId: string; channelName:
             <button onClick={p.onClearReply} aria-label="Cancel reply">
               <X size={14} />
             </button>
+          </div>
+        )}
+        {hasFormatting && (
+          <div className="border-b border-line px-3 py-2 text-[15px] leading-relaxed break-words whitespace-pre-wrap" aria-label="Preview of your message">
+            <div className="mb-0.5 text-[10px] font-semibold tracking-wide text-faint uppercase">Preview</div>
+            <FormattedText text={text} sessionId={p.sessionId} />
           </div>
         )}
         {files.length > 0 && (

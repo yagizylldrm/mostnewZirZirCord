@@ -54,7 +54,8 @@
         "expo-build-properties",
         {
           "android": {
-            "minSdkVersion": 26
+            "minSdkVersion": 26,
+            "enableMinifyInReleaseBuilds": false
           }
         }
       ],
@@ -68,7 +69,8 @@
       "@config-plugins/react-native-webrtc",
       "@livekit/react-native-expo-plugin",
       "./plugins/withScreenShare",
-      "expo-secure-store"
+      "expo-secure-store",
+      "./plugins/withAndroidSigning"
     ],
     "extra": {
       "apiUrl": "http://localhost:4000"
