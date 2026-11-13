@@ -8,6 +8,7 @@ import { prisma } from '../src/lib/db';
 import { headObject } from '../src/lib/storage';
 import { clearAccessCache } from '../src/sessions/access';
 import { sweepSleepingSessions } from '../src/sessions/sleep';
+import { env } from '../src/env';
 import { Client, startServer } from './helpers';
 
 let app: FastifyInstance;
@@ -143,6 +144,23 @@ describe('app-only access', () => {
     expect(await tryConnect({ auth: { token: u.token } })).toBe('app_required');
     expect(await tryConnect({ auth: { token: u.token, client: 'web/1' }, extraHeaders: { origin: 'https://evil.example' } })).not.toBe('ok');
     expect(await tryConnect({ auth: { token: u.token, client: 'mobile/1' } })).toBe('ok');
+  });
+
+  it("lets the phone app's sockets in: React Native adds the server's own address as Origin", async () => {
+    const u = await mk().guest('Phone');
+    const tryConnect = (opts: Parameters<typeof ioc>[1]) =>
+      new Promise<string>((res) => {
+        const s = ioc(base, { transports: ['websocket'], forceNew: true, reconnection: false, ...opts });
+        s.once('connect', () => (s.disconnect(), res('ok')));
+        s.once('connect_error', (e) => (s.disconnect(), res(e.message)));
+      });
+    const own = new URL(env.PUBLIC_API_URL).origin;
+    expect(await tryConnect({ auth: { token: u.token, client: 'mobile/1' }, extraHeaders: { origin: own } })).toBe('ok');
+    // The API's own address does not make an anonymous script an app, and other websites stay out.
+    expect(await tryConnect({ auth: { token: u.token }, extraHeaders: { origin: own } })).toBe('app_required');
+    expect(await tryConnect({ auth: { token: u.token, client: 'mobile/1' }, extraHeaders: { origin: 'https://evil.example' } })).not.toBe('ok');
+    const raw = await fetch(base + '/me', { headers: { origin: own, 'x-zz-client': 'mobile/1', 'x-forwarded-for': '10.9.1.1' } });
+    expect(raw.status).toBe(401); // reached auth
   });
 });
 

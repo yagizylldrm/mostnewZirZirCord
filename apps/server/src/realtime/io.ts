@@ -1,6 +1,6 @@
 import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
-import { checkClient, corsOriginAllowed, enforceClientCheck, isAllowedOrigin } from '../lib/client-check';
+import { checkClient, corsOriginAllowed, enforceClientCheck, isAllowedOrigin, normalizeOrigin } from '../lib/client-check';
 import { HttpError } from '../lib/errors';
 import { assertUserActive, verifyAccessToken } from '../auth/tokens';
 import { prisma } from '../lib/db';
@@ -23,7 +23,7 @@ export function createRealtime(httpServer: HttpServer) {
     cors: { origin: (origin, cb) => cb(null, corsOriginAllowed(origin)), credentials: true },
     // WebSocket upgrades aren't covered by CORS: refuse other websites outright.
     allowRequest: (req, cb) => {
-      const origin = req.headers.origin;
+      const origin = normalizeOrigin(req.headers.origin);
       const bad = !!origin && origin !== 'null' && !isAllowedOrigin(origin);
       if (bad && !enforceClientCheck()) console.warn(`[socket] foreign origin ${origin} (log only)`);
       cb(bad && enforceClientCheck() ? 'bad_origin' : null, !(bad && enforceClientCheck()));

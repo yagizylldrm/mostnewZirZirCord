@@ -24,9 +24,24 @@ export const isAllowedOrigin = (origin: string) => corsPatterns.some((re) => re.
 /** For CORS: no origin / "null" (apps) is fine here — checkClient decides about those. */
 export const corsOriginAllowed = (origin: string | undefined) => !origin || origin === 'null' || isAllowedOrigin(origin);
 
+/**
+ * React Native adds "Origin: <server url>" to its WebSocket requests. The API serves no web pages,
+ * so a request claiming the API's own address is not another website: it is treated like "no
+ * origin" and has to prove itself as an app (X-ZZ-Client / auth.client) like any other.
+ */
+const SELF_ORIGIN = (() => {
+  try {
+    return new URL(env.PUBLIC_API_URL).origin;
+  } catch {
+    return null;
+  }
+})();
+export const normalizeOrigin = (origin: string | undefined) => (origin && origin === SELF_ORIGIN ? undefined : origin);
+
 export type ClientVerdict = { ok: true } | { ok: false; code: 'bad_origin' | 'app_required'; message: string };
 
-export function checkClient(origin: string | undefined, client: unknown): ClientVerdict {
+export function checkClient(rawOrigin: string | undefined, client: unknown): ClientVerdict {
+  const origin = normalizeOrigin(rawOrigin);
   if (origin && origin !== 'null') {
     // Only our own pages can make a browser send our origin, so that alone is enough
     // (it also keeps already-deployed website builds working).
