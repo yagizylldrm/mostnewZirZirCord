@@ -1,26 +1,34 @@
 import { can, canModerate, SCREEN_PRESETS, type ScreenPreset } from '@zirzircord/shared';
-import type { CallParticipant } from '@zirzircord/client-core';
-import { ChevronUp, Expand, Headphones, HeadphoneOff, MessageSquare, Mic, MicOff, MonitorUp, PhoneOff, Video, VideoOff, Volume2, Wifi } from 'lucide-react';
+import { type CallParticipant, MAX_USER_VOLUME } from '@zirzircord/client-core';
+import {
+  ChevronUp,
+  Expand,
+  Headphones,
+  HeadphoneOff,
+  MessageSquare,
+  Mic,
+  MicOff,
+  Minimize2,
+  MonitorUp,
+  PhoneOff,
+  Video,
+  VideoOff,
+  Volume2,
+  VolumeX,
+  Wifi,
+} from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { call, ui, useApp, useCall, zz } from '../lib/zz';
+import { call, ui, useApp, useCall, useUi, zz } from '../lib/zz';
 import { Avatar, cx } from './ui';
+import { VideoEl } from './VideoEl';
 
-function VideoEl({ identity, source, contain }: { identity: string; source: 'screen' | 'camera'; contain?: boolean }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  const version = useCall((c) => c.trackVersion);
-  useEffect(() => {
-    const el = ref.current;
-    const track = call.getVideoTrack(identity, source);
-    if (!el || !track) return;
-    track.attach(el);
-    return () => {
-      track.detach(el);
-    };
-  }, [identity, source, version]);
-  return <video ref={ref} autoPlay playsInline muted className={cx('size-full bg-black', contain ? 'object-contain' : 'object-cover')} />;
-}
-
-const qualityColor = { excellent: 'text-ok', good: 'text-ok', poor: 'text-warn', lost: 'text-danger', unknown: 'text-faint' };
+const qualityColor = {
+  excellent: 'text-ok',
+  good: 'text-ok',
+  poor: 'text-warn',
+  lost: 'text-danger',
+  unknown: 'text-faint',
+};
 
 function Tile({ p, sessionId, big }: { p: CallParticipant; sessionId: string; big?: boolean }) {
   const view = useApp((s) => s.sessions[sessionId]);
@@ -32,11 +40,7 @@ function Tile({ p, sessionId, big }: { p: CallParticipant; sessionId: string; bi
 
   return (
     <div
-      className={cx(
-        'group relative overflow-hidden rounded-xl bg-side',
-        p.speaking && 'ring-2 ring-ok',
-        big ? 'size-full' : 'aspect-video',
-      )}
+      className={cx('group relative overflow-hidden rounded-xl bg-side', p.speaking && 'ring-2 ring-ok', big ? 'size-full' : 'aspect-video')}
       onContextMenu={(e) => (e.preventDefault(), setMenu(true))}
     >
       {p.cameraOn ? (
@@ -70,7 +74,7 @@ function Tile({ p, sessionId, big }: { p: CallParticipant; sessionId: string; bi
               <input
                 type="range"
                 min={0}
-                max={2}
+                max={MAX_USER_VOLUME}
                 step={0.05}
                 value={p.volume}
                 onChange={(e) => call.setUserVolume(p.id, Number(e.target.value))}
@@ -100,23 +104,46 @@ function Tile({ p, sessionId, big }: { p: CallParticipant; sessionId: string; bi
   );
 }
 
+/** Shrinks a screen share into the floating mini player and goes back to chat. */
+export function minimizeScreen(sessionId: string, identity: string) {
+  ui.setState((u) => ({
+    miniScreen: { sessionId, identity },
+    callView: { ...u.callView, [sessionId]: false },
+  }));
+}
+
+/** Mute / unmute a screen share's sound for me only (shown when it carries sound). */
+export function ScreenMuteButton({ p, className }: { p: CallParticipant; className?: string }) {
+  if (p.isLocal || !p.screenHasAudio) return null;
+  const label = p.screenAudioMuted ? 'Unmute stream sound' : 'Mute stream sound';
+  return (
+    <button onClick={() => call.setScreenAudioMuted(p.id, !p.screenAudioMuted)} className={className} aria-label={label} title={label}>
+      {p.screenAudioMuted ? <VolumeX size={16} className="text-danger" /> : <Volume2 size={16} />}
+    </button>
+  );
+}
+
 function ScreenStage({ p, sessionId }: { p: CallParticipant; sessionId: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const view = useApp((s) => s.sessions[sessionId]);
   const name = view?.members[p.id]?.nickname || view?.members[p.id]?.user.displayName || p.name;
+  const btn = 'rounded-md bg-black/60 p-1.5 hover:bg-black/80';
   return (
     <div ref={ref} className="group relative size-full overflow-hidden rounded-xl bg-black">
       <VideoEl identity={p.id} source="screen" contain />
       <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 text-sm">
         <MonitorUp size={14} className="text-ok" /> {p.isLocal ? 'Your screen' : `${name}'s screen`}
+        {p.screenAudioMuted && <VolumeX size={14} className="text-danger" aria-label="Stream sound muted" />}
       </div>
-      <button
-        onClick={() => ref.current?.requestFullscreen?.()}
-        className="absolute top-2 right-2 rounded-md bg-black/60 p-1.5 opacity-0 group-hover:opacity-100"
-        aria-label="Fullscreen"
-      >
-        <Expand size={16} />
-      </button>
+      <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 max-md:opacity-100">
+        <ScreenMuteButton p={p} className={btn} />
+        <button onClick={() => minimizeScreen(sessionId, p.id)} className={btn} aria-label="Minimize" title="Minimize (keep watching over the chat)">
+          <Minimize2 size={16} />
+        </button>
+        <button onClick={() => ref.current?.requestFullscreen?.()} className={btn} aria-label="Fullscreen" title="Fullscreen">
+          <Expand size={16} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -145,13 +172,27 @@ export function CallView() {
   const channel = channels.find((ch) => ch.id === c.channelId);
   const sharers = useMemo(() => c.participants.filter((p) => p.screenSharing), [c.participants]);
   const stage = sharers.find((p) => p.id === focus) ?? sharers[0];
+  // Opening the call view brings a minimized stream back onto the stage.
+  const mini = useUi((u) => u.miniScreen);
+  useEffect(() => {
+    if (mini?.sessionId !== sessionId) return;
+    setFocus(mini.identity);
+    ui.setState({ miniScreen: null });
+  }, [mini, sessionId]);
 
   if (!inThisSession) {
     return (
       <div className="grid flex-1 place-items-center p-6 text-center">
         <div className="space-y-3">
           <p className="text-muted">You are not in a voice channel in this session.</p>
-          <button className="rounded-md bg-field px-4 py-2 text-sm" onClick={() => ui.setState((u) => ({ callView: { ...u.callView, [sessionId]: false } }))}>
+          <button
+            className="rounded-md bg-field px-4 py-2 text-sm"
+            onClick={() =>
+              ui.setState((u) => ({
+                callView: { ...u.callView, [sessionId]: false },
+              }))
+            }
+          >
             Back to chat
           </button>
         </div>
@@ -168,7 +209,11 @@ export function CallView() {
         <div className="flex-1" />
         <button
           className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted hover:bg-hover hover:text-fg"
-          onClick={() => ui.setState((u) => ({ callView: { ...u.callView, [sessionId]: false } }))}
+          onClick={() =>
+            ui.setState((u) => ({
+              callView: { ...u.callView, [sessionId]: false },
+            }))
+          }
         >
           <MessageSquare size={16} /> Chat
         </button>
@@ -281,7 +326,21 @@ export function CallView() {
   );
 }
 
-function CtrlButton({ label, children, onClick, on, off, danger }: { label: string; children: React.ReactNode; onClick: () => void; on?: boolean; off?: boolean; danger?: boolean }) {
+function CtrlButton({
+  label,
+  children,
+  onClick,
+  on,
+  off,
+  danger,
+}: {
+  label: string;
+  children: React.ReactNode;
+  onClick: () => void;
+  on?: boolean;
+  off?: boolean;
+  danger?: boolean;
+}) {
   return (
     <button
       title={label}

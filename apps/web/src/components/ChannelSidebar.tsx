@@ -6,6 +6,7 @@ import { copyText } from '../lib/format';
 import { call, openModal, ui, useApp, useCall, zz } from '../lib/zz';
 import { UserPanel } from './UserPanel';
 import { Avatar, cx } from './ui';
+import { SessionPicture } from './SessionPicture';
 
 export function ChannelSidebar() {
   const { view, activeChannel, me, unread, mutedChannels, sessionMuted } = useApp((s) => {
@@ -49,7 +50,8 @@ export function ChannelSidebar() {
           onClick={() => setMenu((m) => !m)}
           className="flex h-12 w-full items-center justify-between border-b border-black/30 px-4 font-semibold hover:bg-hover"
         >
-          <span className="flex min-w-0 items-center gap-1.5">
+          <span className="flex min-w-0 items-center gap-2">
+            {session.iconUrl && <SessionPicture s={session} className="size-6 rounded-md text-[10px]" />}
             <span className="truncate">{session.name}</span>
             {sessionMuted && <BellOff size={14} className="shrink-0 text-faint" aria-label="Notifications muted" />}
           </span>

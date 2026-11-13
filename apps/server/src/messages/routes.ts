@@ -1,17 +1,19 @@
 import type { FastifyInstance } from 'fastify';
 import sharp from 'sharp';
 import { z } from 'zod';
-import { LIMITS, can, canMentionEveryone, editMessageSchema, neutralizeEveryone, parseMentions, sendMessageSchema } from '@zirzircord/shared';
+import { LIMITS, MAX_REACTIONS_PER_MESSAGE, can, canMentionEveryone, editMessageSchema, neutralizeEveryone, parseMentions, reactionEmojiSchema, sendMessageSchema } from '@zirzircord/shared';
 import { prisma } from '../lib/db';
 import { badRequest, forbidden, notFound } from '../lib/errors';
-import { toMessageDTO } from '../lib/serializers';
+import { toMessageDTO, toReactionDTOs } from '../lib/serializers';
+import { assertNotTimedOut, hitMessageLimit, hitReactionLimit } from '../lib/spam';
 import { randomUUID } from 'node:crypto';
 import { copyObject, deleteKeys, getObjectBuffer, headObject, putObject } from '../lib/storage';
 import { requireChannelAccess } from '../sessions/access';
 import { rooms } from '../sessions/hub';
 
 const cid = z.object({ id: z.string().uuid() });
-const include = { attachments: true } as const;
+const include = { attachments: true, reactions: true } as const;
+const ACTIVITY_BUMP_MS = 60 * 60 * 1000;
 const THUMBNAIL_MAX_BYTES = 25 * 1024 * 1024;
 
 /**
@@ -103,6 +105,8 @@ export async function messageRoutes(app: FastifyInstance) {
     const { channel, session, member } = await requireChannelAccess(id, req.auth.userId);
     if (channel.type !== 'TEXT') throw badRequest('Not a text channel');
     if (session.state !== 'ACTIVE') throw forbidden('Session is not active');
+    assertNotTimedOut(member);
+    await hitMessageLimit(app.io, session.id, req.auth.userId);
 
     // Everything below is independent, so run it in parallel (each step is a
     // network round trip to the database or storage).
@@ -142,6 +146,10 @@ export async function messageRoutes(app: FastifyInstance) {
     }
     const dto = { ...(await toMessageDTO({ ...msg, attachments })), nonce: body.nonce };
     app.io.to(rooms.channel(id)).emit('message:new', dto);
+    // Keeps set sessions awake (at most one write per hour per session).
+    void prisma.session
+      .updateMany({ where: { id: session.id, lastActiveAt: { lt: new Date(Date.now() - ACTIVITY_BUMP_MS) } }, data: { lastActiveAt: new Date() } })
+      .catch(() => {});
 
     // Generate thumbnails in the background, then push the updated message.
     // Thumbnails are made in memory, so skip very large images (they're shown as-is).
@@ -178,6 +186,7 @@ export async function messageRoutes(app: FastifyInstance) {
     if (!msg) throw notFound('Message');
     const { session, member } = await requireChannelAccess(msg.channelId, req.auth.userId);
     if (msg.authorId !== req.auth.userId) throw forbidden('You can only edit your own messages');
+    assertNotTimedOut(member);
     const resolved = await resolveMentions(body.content, session.id, member.role, session);
     const updated = await prisma.message.update({
       where: { id },
@@ -199,5 +208,47 @@ export async function messageRoutes(app: FastifyInstance) {
     await deleteKeys(msg.attachments.flatMap((a) => [a.storageKey, a.thumbnailKey].filter(Boolean) as string[])).catch(() => {});
     app.io.to(rooms.channel(msg.channelId)).emit('message:deleted', { channelId: msg.channelId, messageId: id });
     return { ok: true };
+  });
+
+  // -------------------------------------------------------------- reactions
+
+  const reactParams = z.object({ id: z.string().uuid(), emoji: z.string() });
+
+  async function reactionTarget(params: unknown, userId: string) {
+    const { id, emoji: raw } = reactParams.parse(params);
+    const emoji = reactionEmojiSchema.parse(raw); // Fastify already percent-decodes params
+    const msg = await prisma.message.findUnique({ where: { id }, select: { id: true, channelId: true } });
+    if (!msg) throw notFound('Message');
+    const { member } = await requireChannelAccess(msg.channelId, userId);
+    assertNotTimedOut(member);
+    await hitReactionLimit(userId);
+    return { msg, emoji };
+  }
+
+  async function broadcastReactions(messageId: string, channelId: string) {
+    const rows = await prisma.reaction.findMany({ where: { messageId } });
+    const reactions = toReactionDTOs(rows);
+    app.io.to(rooms.channel(channelId)).emit('reaction:update', { channelId, messageId, reactions });
+    return reactions;
+  }
+
+  app.put('/messages/:id/reactions/:emoji', auth, async (req) => {
+    const { msg, emoji } = await reactionTarget(req.params, req.auth.userId);
+    const existing = await prisma.reaction.findMany({ where: { messageId: msg.id }, select: { emoji: true }, distinct: ['emoji'] });
+    if (!existing.some((r) => r.emoji === emoji) && existing.length >= MAX_REACTIONS_PER_MESSAGE) {
+      throw badRequest(`A message can have at most ${MAX_REACTIONS_PER_MESSAGE} different reactions`, 'too_many_reactions');
+    }
+    await prisma.reaction.upsert({
+      where: { messageId_userId_emoji: { messageId: msg.id, userId: req.auth.userId, emoji } },
+      create: { messageId: msg.id, userId: req.auth.userId, emoji },
+      update: {},
+    });
+    return { reactions: await broadcastReactions(msg.id, msg.channelId) };
+  });
+
+  app.delete('/messages/:id/reactions/:emoji', auth, async (req) => {
+    const { msg, emoji } = await reactionTarget(req.params, req.auth.userId);
+    await prisma.reaction.deleteMany({ where: { messageId: msg.id, userId: req.auth.userId, emoji } });
+    return { reactions: await broadcastReactions(msg.id, msg.channelId) };
   });
 }

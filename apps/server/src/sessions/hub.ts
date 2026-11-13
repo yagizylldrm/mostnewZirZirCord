@@ -31,6 +31,8 @@ const K = {
   voice: (cid: string) => `voice:${cid}`, // SET userIds in a voice channel
 };
 
+type CloseReason = 'empty' | 'deleted' | 'expired';
+
 export const rooms = {
   session: (sid: string) => `s:${sid}`,
   channel: (cid: string) => `c:${cid}`,
@@ -116,11 +118,16 @@ export class SessionHub {
       if (await isSessionBanned(sessionId, userId, deviceHash)) throw forbidden('You are banned from this session', 'banned');
 
       let session = member.session;
-      if (session.state === 'DORMANT') {
+      if (session.state === 'DORMANT' || session.sleepingSince) {
         clearAccessCache();
-        // Reopening a set session: the opener becomes the first present member → host.
-        session = await prisma.session.update({ where: { id: sessionId }, data: { state: 'ACTIVE' } });
+        // Reopening (or waking) a set session: the opener becomes the first present member → host.
+        session = await prisma.session.update({
+          where: { id: sessionId },
+          data: { state: 'ACTIVE', sleepingSince: null, lastActiveAt: new Date() },
+        });
         this.io.to(rooms.session(sessionId)).emit('session:updated', toSessionDTO(session));
+      } else if (Date.now() - session.lastActiveAt.getTime() > 60 * 60 * 1000) {
+        await prisma.session.update({ where: { id: sessionId }, data: { lastActiveAt: new Date() } });
       }
 
       this.cancelTimer(`${sessionId}:${userId}`);
@@ -220,7 +227,7 @@ export class SessionHub {
   // ------------------------------------------------------------- lifecycle
 
   /** Must be called while holding the session lock. */
-  private async closeOrSleep(sessionId: string, reason: 'empty' | 'deleted') {
+  private async closeOrSleep(sessionId: string, reason: CloseReason) {
     clearAccessCache();
     const session = await prisma.session.findUnique({ where: { id: sessionId } });
     if (!session) return;
@@ -235,7 +242,7 @@ export class SessionHub {
   }
 
   /** Deletes a session and everything it owns: messages, files, voice rooms, presence. */
-  private async destroy(sessionId: string, reason: 'empty' | 'deleted') {
+  private async destroy(sessionId: string, reason: CloseReason) {
     const [channels, attachments] = await Promise.all([
       prisma.channel.findMany({ where: { sessionId } }),
       prisma.attachment.findMany({ where: { sessionId }, select: { storageKey: true, thumbnailKey: true } }),
@@ -260,9 +267,9 @@ export class SessionHub {
     await deletePrefix(`sessions/${sessionId}/`).catch(() => {});
   }
 
-  /** Owner deletes the session outright (also for set sessions). */
-  async deleteSession(sessionId: string) {
-    await withLock(`sess:${sessionId}`, () => this.destroy(sessionId, 'deleted'));
+  /** Owner deletes the session outright (also for set sessions), or it expired after sleeping too long. */
+  async deleteSession(sessionId: string, reason: 'deleted' | 'expired' = 'deleted') {
+    await withLock(`sess:${sessionId}`, () => this.destroy(sessionId, reason));
   }
 
   // ---------------------------------------------------------------- recovery

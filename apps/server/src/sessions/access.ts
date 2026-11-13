@@ -53,10 +53,12 @@ export function clearAccessCache() {
   accessCache.clear();
 }
 
-const DATE_KEYS = new Set(['createdAt', 'firstVisitedAt', 'lastVisitedAt', 'mutedUntil']);
+const DATE_KEYS = new Set(['createdAt', 'firstVisitedAt', 'lastVisitedAt', 'mutedUntil', 'timeoutUntil', 'lastActiveAt', 'sleepingSince', 'editedAt']);
+// Prisma stores DateTime as UTC "timestamp without time zone"; row_to_json drops the zone, so add it back.
+const utc = (v: string) => new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(v) ? v : `${v}Z`);
 const revive = <T>(o: Record<string, unknown> | null): T | null => {
   if (!o) return null;
-  for (const k of Object.keys(o)) if (DATE_KEYS.has(k) && typeof o[k] === 'string') o[k] = new Date(o[k] as string);
+  for (const k of Object.keys(o)) if (DATE_KEYS.has(k) && typeof o[k] === 'string') o[k] = utc(o[k] as string);
   return o as T;
 };
 

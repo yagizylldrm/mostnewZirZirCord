@@ -1,4 +1,4 @@
-import { formatSessionCode, normalizeSessionCode } from '@zirzircord/shared';
+import { formatSessionCode, normalizeSessionCode, SET_SESSION_EXPIRY_NOTE } from '@zirzircord/shared';
 import { type FormEvent, useState } from 'react';
 import { Button, Field, Modal, ToggleRow, inputCls } from '../components/ui';
 import { closeModal, useApp, zz } from '../lib/zz';
@@ -28,8 +28,8 @@ export function CreateSessionModal() {
           title="Set session"
           desc={
             me.isGuest
-              ? 'Create an account to make permanent sessions.'
-              : 'Stays available after everyone leaves. Past visitors can reopen it any time.'
+              ? 'Create an account to make set sessions.'
+              : `Stays available after everyone leaves. Past visitors can reopen it any time. ${SET_SESSION_EXPIRY_NOTE}`
           }
           checked={isSet}
           onChange={setIsSet}

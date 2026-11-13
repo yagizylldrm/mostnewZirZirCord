@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { ChannelSidebar } from './ChannelSidebar';
 import { CallView } from './CallView';
 import { ChatView } from './ChatView';
+import { FloatingScreen } from './FloatingScreen';
 import { Home } from './Home';
 import { Lightbox } from './Lightbox';
 import { MemberList } from './MemberList';
@@ -76,6 +77,7 @@ export function Shell() {
           )}
         </div>
       </main>
+      <FloatingScreen />
       <Modals />
       <ProfilePopover />
       <Lightbox />

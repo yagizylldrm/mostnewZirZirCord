@@ -8,6 +8,8 @@ export interface KeyValueStorage {
 export interface PlatformConfig {
   apiUrl: string;
   storage: KeyValueStorage;
+  /** `<platform>/<version>` sent as X-ZZ-Client (web, desktop, tauri or mobile). The server rejects app traffic without it. */
+  client: string;
 }
 
 export const webStorage: KeyValueStorage = {

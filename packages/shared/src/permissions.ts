@@ -14,6 +14,7 @@ export type SessionAction =
   | 'session.editSettings'
   | 'session.kick'
   | 'session.ban'
+  | 'session.timeout'
   | 'channel.kick'
   | 'channel.ban'
   | 'channel.manage'

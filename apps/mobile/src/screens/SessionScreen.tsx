@@ -1,6 +1,6 @@
 import { AudioSession, VideoView } from '@livekit/react-native';
-import { isChannelMuted, isSessionMuted, listedMembers, memberName, sessionUnread } from '@zirzircord/client-core';
-import { can, canCreateChannel, canModerate, formatSessionCode, isJumboEmoji, type MessageDTO } from '@zirzircord/shared';
+import { type CallParticipant, type LocalMessage, isChannelMuted, isSessionMuted, listedMembers, memberName, sessionUnread } from '@zirzircord/client-core';
+import { QUICK_REACTIONS, can, canCreateChannel, canModerate, formatSessionCode, isJumboEmoji, splitMentions, type MessageDTO } from '@zirzircord/shared';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useMemo, useState } from 'react';
 import { AppState as RNAppState } from 'react-native';
@@ -152,7 +152,11 @@ function ChatTab({ sessionId }: { sessionId: string }) {
         )}
       </ScrollView>
       {channel ? <Messages key={channel.id} sessionId={sessionId} channelId={channel.id} /> : <Text style={[s.muted, { padding: 20 }]}>No text channels.</Text>}
-      {channel && <Composer sessionId={sessionId} channelId={channel.id} channelName={channel.name} />}
+      {channel && (
+        <TimeoutGate sessionId={sessionId}>
+          <Composer sessionId={sessionId} channelId={channel.id} channelName={channel.name} />
+        </TimeoutGate>
+      )}
       <NewChannelSheet sessionId={sessionId} type="TEXT" visible={newChannel} onClose={() => setNewChannel(false)} />
     </View>
   );
@@ -177,15 +181,9 @@ function Messages({ sessionId, channelId }: { sessionId: string; channelId: stri
     .filter(([u, exp]) => exp > Date.now() && u !== meId)
     .map(([u]) => memberName(view, u));
 
-  const onLongPress = (m: MessageDTO) => {
-    const mine = m.authorId === meId;
-    const canDel = mine || can(view?.myRole, 'message.deleteAny');
-    if (!canDel) return;
-    Alert.alert('Message', undefined, [
-      { text: 'Delete', style: 'destructive', onPress: () => zz.attempt(() => zz.api.deleteMessage(m.id)) },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  };
+  const [actions, setActions] = useState<MessageDTO | null>(null);
+  const timedOut = isTimedOut(view?.members[meId]?.timeoutUntil);
+  const onLongPress = (m: MessageDTO) => setActions(m);
 
   return (
     <View style={s.flex}>
@@ -233,6 +231,7 @@ function Messages({ sessionId, channelId }: { sessionId: string; channelId: stri
                     {f.kind === 'VOICE_MESSAGE' ? '🎙️ Voice message' : `📎 ${f.filename}`}
                   </Text>
                 ))}
+                {!!m.reactions?.length && <ReactionChips m={m} meId={meId} disabled={timedOut} />}
                 {m.pending && !m.failed && <Text style={{ color: C.faint, fontSize: 11 }}>Sending…</Text>}
                 {m.failed && (
                   <View style={[s.row, { gap: 12 }]}>
@@ -252,6 +251,85 @@ function Messages({ sessionId, channelId }: { sessionId: string; channelId: stri
         ListFooterComponent={cm?.loaded && !cm.hasMore ? <Text style={[s.muted, { textAlign: 'center', padding: 16 }]}>This is the start of the channel.</Text> : undefined}
       />
       <Text style={[s.muted, { paddingHorizontal: 14, height: 18, fontSize: 12 }]}>{typers.length ? `${typers.slice(0, 3).join(', ')} ${typers.length > 1 ? 'are' : 'is'} typing…` : ''}</Text>
+      <Sheet visible={!!actions} title="Message" onClose={() => setActions(null)}>
+        {actions && (
+          <>
+            {!timedOut && (
+              <View style={[s.row, { justifyContent: 'space-between' }]}>
+                {QUICK_REACTIONS.map((e) => (
+                  <Pressable
+                    key={e}
+                    accessibilityLabel={`React with ${e}`}
+                    onPress={() => (setActions(null), zz.toggleReaction(actions.channelId, actions.id, e))}
+                    style={({ pressed }) => ({ padding: 8, borderRadius: 12, backgroundColor: pressed ? C.field : C.side })}
+                  >
+                    <Text style={{ fontSize: 26 }}>{e}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            {!!actions.content && <Btn variant="secondary" title="Copy text" onPress={async () => (setActions(null), await Clipboard.setStringAsync(actions.content), zz.notify('Copied', 'success'))} />}
+            {(actions.authorId === meId || can(view?.myRole, 'message.deleteAny')) && (
+              <Btn
+                variant="danger"
+                title="Delete message"
+                onPress={() => {
+                  const m = actions;
+                  setActions(null);
+                  zz.attempt(() => zz.api.deleteMessage(m.id));
+                }}
+              />
+            )}
+          </>
+        )}
+      </Sheet>
+    </View>
+  );
+}
+
+const isTimedOut = (until: string | null | undefined) => !!until && new Date(until).getTime() > Date.now();
+
+function ReactionChips({ m, meId, disabled }: { m: LocalMessage; meId: string; disabled: boolean }) {
+  return (
+    <View style={[s.row, { flexWrap: 'wrap', gap: 6 }]}>
+      {m.reactions.map((r) => {
+        const mine = r.userIds.includes(meId);
+        return (
+          <Pressable
+            key={r.emoji}
+            disabled={disabled}
+            accessibilityLabel={`${r.emoji} ${r.userIds.length}${mine ? ', including you' : ''}`}
+            onPress={() => zz.toggleReaction(m.channelId, m.id, r.emoji)}
+            style={[s.row, { gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, borderWidth: 1, borderColor: mine ? C.brand : 'transparent', backgroundColor: mine ? C.brand + '33' : C.side }]}
+          >
+            <Text style={{ fontSize: 15 }}>{r.emoji}</Text>
+            <Text style={{ color: mine ? C.fg : C.muted, fontWeight: '700', fontSize: 12 }}>{r.userIds.length}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** While I'm timed out, the composer becomes a countdown (reading still works). */
+function TimeoutGate({ sessionId, children }: { sessionId: string; children: React.ReactNode }) {
+  const until = useApp((st) => st.sessions[sessionId]?.members[st.me!.id]?.timeoutUntil ?? null);
+  const end = until ? new Date(until).getTime() : 0;
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (end <= Date.now()) return;
+    const t = setInterval(() => tick((n) => n + 1), 1000); // re-render every second
+    return () => clearInterval(t);
+  }, [end]);
+  const now = Date.now();
+  if (end <= now) return <>{children}</>;
+  const left = Math.ceil((end - now) / 1000);
+  const mm = Math.floor(left / 60);
+  const clock = mm >= 60 ? `${Math.floor(mm / 60)}h ${mm % 60}m` : `${mm}:${String(left % 60).padStart(2, '0')}`;
+  return (
+    <View style={{ margin: 10, padding: 12, borderRadius: 10, backgroundColor: C.warn + '26', flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+      <Text style={{ color: C.warn, flex: 1 }}>⏱ You are timed out and can’t send messages or react.</Text>
+      <Text style={{ color: C.warn, fontWeight: '800', fontVariant: ['tabular-nums'] }}>{clock}</Text>
     </View>
   );
 }
@@ -335,6 +413,7 @@ function CallStage({ sessionId }: { sessionId: string }) {
   const c = useCall((c) => ({ participants: c.participants, mic: c.micEnabled, deaf: c.deafened, cam: c.cameraEnabled, screen: c.screenSharing, v: c.trackVersion, status: c.status, ptt: c.pttMode, channelId: c.channelId, micError: c.micError, serverMuted: c.serverMuted }));
   const sharer = c.participants.find((p) => p.screenSharing && !p.isLocal) ?? c.participants.find((p) => p.screenSharing);
   const channel = view?.channels.find((ch) => ch.id === c.channelId);
+  const [mini, setMini] = useState(false);
 
   const leave = async () => {
     await call.leave();
@@ -356,12 +435,17 @@ function CallStage({ sessionId }: { sessionId: string }) {
           <Text style={{ color: C.warn }}>{c.micError} You can still hear everyone. Tap to retry.</Text>
         </Pressable>
       )}
-      {sharer && (
+      {sharer && !mini && (
         <View style={{ aspectRatio: 16 / 9, backgroundColor: 'black', marginHorizontal: 8, borderRadius: 10, overflow: 'hidden' }}>
           <VideoView key={`${sharer.id}-${c.v}`} videoTrack={call.getVideoTrack(sharer.id, 'screen')} objectFit="contain" style={{ flex: 1 }} />
           <Text style={{ position: 'absolute', left: 8, bottom: 6, color: 'white', backgroundColor: '#0009', paddingHorizontal: 6, borderRadius: 4 }}>
             {sharer.isLocal ? 'Your screen' : `${memberName(view, sharer.id)}'s screen`}
+            {sharer.screenAudioMuted ? ' · 🔇' : ''}
           </Text>
+          <View style={{ position: 'absolute', top: 6, right: 6, flexDirection: 'row', gap: 6 }}>
+            <ScreenSoundBtn p={sharer} />
+            <StageBtn label="Minimize" glyph="↘︎" onPress={() => setMini(true)} />
+          </View>
         </View>
       )}
       <ScrollView contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', padding: 8, gap: 8 }}>
@@ -387,6 +471,18 @@ function CallStage({ sessionId }: { sessionId: string }) {
           );
         })}
       </ScrollView>
+      {sharer && mini && (
+        <Pressable
+          accessibilityLabel="Expand screen share"
+          onPress={() => setMini(false)}
+          style={{ position: 'absolute', right: 10, top: 44, width: 168, aspectRatio: 16 / 9, backgroundColor: 'black', borderRadius: 10, overflow: 'hidden', zIndex: 10, elevation: 8, borderWidth: 1, borderColor: '#fff3' }}
+        >
+          <VideoView key={`${sharer.id}-mini-${c.v}`} videoTrack={call.getVideoTrack(sharer.id, 'screen')} objectFit="contain" style={{ flex: 1 }} />
+          <View style={{ position: 'absolute', top: 4, right: 4 }}>
+            <ScreenSoundBtn p={sharer} small />
+          </View>
+        </Pressable>
+      )}
       {c.ptt && !c.serverMuted && (
         <Pressable
           onPressIn={() => call.setPttPressed(true)}
@@ -405,6 +501,27 @@ function CallStage({ sessionId }: { sessionId: string }) {
         <RoundBtn label="Leave" icon={<Text style={{ fontSize: 20 }}>📵</Text>} danger onPress={leave} />
       </View>
     </View>
+  );
+}
+
+function StageBtn({ label, glyph, onPress, small }: { label: string; glyph: string; onPress: () => void; small?: boolean }) {
+  return (
+    <Pressable accessibilityLabel={label} onPress={onPress} hitSlop={8} style={{ backgroundColor: '#0009', borderRadius: 6, paddingHorizontal: small ? 5 : 8, paddingVertical: small ? 2 : 4 }}>
+      <Text style={{ color: 'white', fontSize: small ? 12 : 15 }}>{glyph}</Text>
+    </Pressable>
+  );
+}
+
+/** Mute / unmute a screen share's sound for me only. */
+function ScreenSoundBtn({ p, small }: { p: CallParticipant; small?: boolean }) {
+  if (p.isLocal || !p.screenHasAudio) return null;
+  return (
+    <StageBtn
+      small={small}
+      label={p.screenAudioMuted ? 'Unmute stream sound' : 'Mute stream sound'}
+      glyph={p.screenAudioMuted ? '🔇' : '🔊'}
+      onPress={() => call.setScreenAudioMuted(p.id, !p.screenAudioMuted)}
+    />
   );
 }
 
@@ -439,6 +556,7 @@ function MembersTab({ sessionId }: { sessionId: string }) {
       <Avatar name={memberName(view, m.user.id)} url={m.user.avatarUrl} staticUrl={m.user.avatarStaticUrl} size={36} status={present ? m.user.status : null} />
       <Text style={[s.text, s.flex, { color: m.role === 'OWNER' ? C.owner : m.role === 'MOD' ? C.mod : C.fg }]} numberOfLines={1}>
         {memberName(view, m.user.id)} {view.presence.hostId === m.user.id ? '👑' : ''}
+        {isTimedOut(m.timeoutUntil) ? ' ⏱' : ''}
       </Text>
       <RoleBadge role={m.role} />
     </Pressable>
@@ -488,6 +606,33 @@ function MembersTab({ sessionId }: { sessionId: string }) {
                 onPress={act(() => zz.api.serverMute(sessionId, sel.user.id, !sel.serverMuted), sel.serverMuted ? 'Server mute removed' : 'Server muted')}
               />
             )}
+            {mayMod &&
+              can(view.myRole, 'session.timeout') &&
+              (isTimedOut(sel.timeoutUntil) ? (
+                <Btn
+                  variant="secondary"
+                  title={`Remove timeout (until ${new Date(sel.timeoutUntil!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`}
+                  onPress={act(() => zz.api.timeoutMember(sessionId, sel.user.id, null), 'Timeout removed')}
+                />
+              ) : (
+                <Btn
+                  variant="secondary"
+                  title="Time out…"
+                  onPress={() =>
+                    Alert.alert('Time out', `${memberName(view, sel.user.id)} can read but not write or react.`, [
+                      ...(
+                        [
+                          ['10 minutes', 10],
+                          ['1 hour', 60],
+                          ['1 day', 1440],
+                          ['1 week', 10080],
+                        ] as const
+                      ).map(([label, minutes]) => ({ text: label, onPress: act(() => zz.api.timeoutMember(sessionId, sel.user.id, minutes), `Timed out for ${label}`) })),
+                      { text: 'Cancel', style: 'cancel' as const },
+                    ])
+                  }
+                />
+              ))}
             {mayMod && <Btn variant="danger" title="Kick from session" onPress={act(() => zz.api.kick(sessionId, sel.user.id), 'Kicked')} />}
             {mayMod && <Btn variant="danger" title="Ban from session" onPress={act(() => zz.api.ban(sessionId, { userId: sel.user.id }), 'Banned')} />}
           </>

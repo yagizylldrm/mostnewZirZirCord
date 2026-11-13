@@ -1,8 +1,8 @@
 import { Home as HomeIcon, LogIn, Plus } from 'lucide-react';
 import type { SessionDTO } from '@zirzircord/shared';
-import { isSessionMuted, sessionUnread } from '@zirzircord/client-core';
-import { colorFor, initials } from '../lib/format';
+import { isSessionMuted, sessionUnread, sleepLabel } from '@zirzircord/client-core';
 import { openModal, useApp, useCall, zz } from '../lib/zz';
+import { SessionPicture } from './SessionPicture';
 import { Logo, cx } from './ui';
 
 function SessionIcon({
@@ -21,6 +21,7 @@ function SessionIcon({
   onClick: () => void;
 }) {
   const showDot = !active && !!unread?.count && !unread.muted;
+  const sleep = sleepLabel(s);
   return (
     <div className="group relative flex w-full justify-center">
       <span
@@ -31,14 +32,25 @@ function SessionIcon({
       />
       <button
         onClick={onClick}
-        title={s.name}
+        title={sleep ? `${s.name}\n${sleep.text}` : s.name}
+        aria-label={sleep ? `${s.name} (sleeping)` : s.name}
         className={cx(
           'relative grid size-12 place-items-center font-semibold text-white transition-all',
           active ? 'rounded-2xl' : 'rounded-3xl hover:rounded-2xl',
         )}
-        style={{ background: colorFor(s.id) }}
       >
-        {initials(s.name)}
+        <SessionPicture
+          s={s}
+          className={cx('size-12 transition-all', active ? 'rounded-2xl' : 'rounded-3xl group-hover:rounded-2xl', sleep && 'opacity-60 grayscale')}
+        />
+        {sleep && (
+          <span
+            className={cx('absolute -top-1 -left-1 rounded-full border-2 border-rail px-0.5 text-[11px] leading-4', sleep.urgent ? 'bg-warn' : 'bg-side')}
+            aria-hidden
+          >
+            💤
+          </span>
+        )}
         {live !== undefined && (
           <span className={cx('absolute -right-0.5 -bottom-0.5 size-3.5 rounded-full border-[3px] border-rail', live ? 'bg-ok' : 'bg-faint')} />
         )}

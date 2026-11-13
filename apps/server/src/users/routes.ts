@@ -12,7 +12,7 @@ import { rooms } from '../sessions/hub';
 import { assertUploadQuota } from '../uploads/routes';
 import { deleteUserAccount } from './deletion';
 
-const PREFIX: Record<MediaKind, string> = { avatar: 'avatars', banner: 'banners', sticker: 'sticker-uploads' };
+const PREFIX: Record<MediaKind, string> = { avatar: 'avatars', banner: 'banners', sticker: 'sticker-uploads', sessionIcon: 'session-icon-uploads' };
 
 /**
  * Turns a finished profile-media upload (pending attachment) into processed

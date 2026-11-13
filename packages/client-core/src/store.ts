@@ -1,4 +1,5 @@
 import { createStore } from 'zustand/vanilla';
+import { SLEEP } from '@zirzircord/shared';
 import type { AccountSummary } from './api';
 import type {
   ChannelDTO,
@@ -156,4 +157,20 @@ export function sessionUnread(s: AppState, sessionId: string) {
 /** Replaces <@id> tokens with @Name for previews and notifications. */
 export function mentionsToText(content: string, view: SessionView | undefined) {
   return content.replace(/<@([0-9a-f-]{36})>/g, (_, id) => `@${memberName(view, id)}`);
+}
+
+/** For a sleeping set session: whole days left before it is deleted (null when awake). */
+export function sleepDaysLeft(session: Pick<SessionDTO, 'sleepingSince'>, now = Date.now()): number | null {
+  if (!session.sleepingSince) return null;
+  const deletesAt = new Date(session.sleepingSince).getTime() + SLEEP.deleteAfterDays * 24 * 60 * 60 * 1000;
+  return Math.max(0, Math.ceil((deletesAt - now) / (24 * 60 * 60 * 1000)));
+}
+
+/** Short status line for a sleeping session ("💤 Sleeping · deleted in 5 days unless someone opens it"). */
+export function sleepLabel(session: Pick<SessionDTO, 'sleepingSince'>, now = Date.now()): { text: string; urgent: boolean } | null {
+  const days = sleepDaysLeft(session, now);
+  if (days === null) return null;
+  const urgent = days <= SLEEP.warnDays;
+  const when = days <= 1 ? 'within a day' : `in ${days} days`;
+  return { text: urgent ? `💤 Sleeping · deleted ${when} unless someone opens it` : '💤 Sleeping · open it to wake it up', urgent };
 }

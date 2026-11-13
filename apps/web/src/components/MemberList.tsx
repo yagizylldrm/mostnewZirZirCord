@@ -1,5 +1,5 @@
 import { listedMembers, memberName } from '@zirzircord/client-core';
-import { Crown, MicOff } from 'lucide-react';
+import { Clock, Crown, MicOff } from 'lucide-react';
 import { ui, useApp } from '../lib/zz';
 import { Avatar, RoleBadge, cx } from './ui';
 
@@ -28,6 +28,9 @@ export function MemberList() {
             </span>
             {isHost && <Crown size={14} className="shrink-0 text-brand-2" aria-label="Host" />}
             {m.serverMuted && <MicOff size={13} className="shrink-0 text-danger" aria-label="Muted by a moderator" />}
+            {m.timeoutUntil && new Date(m.timeoutUntil).getTime() > Date.now() && (
+              <Clock size={13} className="shrink-0 text-warn" aria-label="Timed out" />
+            )}
           </div>
           {m.user.bio && <div className="truncate text-xs text-muted">{m.user.bio}</div>}
         </div>

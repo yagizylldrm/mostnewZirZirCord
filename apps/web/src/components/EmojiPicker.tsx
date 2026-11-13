@@ -1,9 +1,10 @@
 import 'emoji-picker-element';
 import dataSource from 'emoji-picker-element-data/en/emojibase/data.json?url';
 import { useEffect, useRef } from 'react';
+import { cx } from './ui';
 
 /** Full emoji picker (web component). Emoji data is bundled locally — no CDN. */
-export function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => void; onClose: () => void }) {
+export function EmojiPicker({ onPick, onClose, below }: { onPick: (emoji: string) => void; onClose: () => void; below?: boolean }) {
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = document.createElement('emoji-picker') as HTMLElement & { dataSource: string };
@@ -30,7 +31,7 @@ export function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => vo
   return (
     <>
       <div className="fixed inset-0 z-30" onClick={onClose} />
-      <div ref={host} className="absolute right-0 bottom-full z-40 mb-2 overflow-hidden rounded-xl shadow-2xl" />
+      <div ref={host} className={cx('absolute right-0 z-40 overflow-hidden rounded-xl shadow-2xl', below ? 'top-full mt-2' : 'bottom-full mb-2')} />
     </>
   );
 }

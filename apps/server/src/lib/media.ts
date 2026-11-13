@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 
-export type MediaKind = 'avatar' | 'banner' | 'sticker';
+export type MediaKind = 'avatar' | 'banner' | 'sticker' | 'sessionIcon';
 
 export interface ProcessedImage {
   /** Final image (animated WebP when the source was animated). */
@@ -16,6 +16,7 @@ const TARGET: Record<MediaKind, { width: number; height: number; fit: 'cover' | 
   avatar: { width: 256, height: 256, fit: 'cover' },
   banner: { width: 960, height: 384, fit: 'cover' },
   sticker: { width: 512, height: 512, fit: 'inside' },
+  sessionIcon: { width: 256, height: 256, fit: 'cover' },
 };
 
 /**

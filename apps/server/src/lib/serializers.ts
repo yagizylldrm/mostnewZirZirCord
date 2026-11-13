@@ -1,13 +1,18 @@
-import type { Attachment, Channel, Message, Session, SessionMember, Sticker, User } from '@prisma/client';
+import type { Attachment, Channel, Message, Reaction, Session, SessionMember, Sticker, User } from '@prisma/client';
 import { createHash } from 'node:crypto';
-import type { AttachmentDTO, ChannelDTO, MemberDTO, MessageDTO, PublicUser, SelfUser, SessionDTO, StickerDTO } from '@zirzircord/shared';
+import type { AttachmentDTO, ChannelDTO, MemberDTO, MessageDTO, PublicUser, ReactionDTO, SelfUser, SessionDTO, StickerDTO } from '@zirzircord/shared';
 import { env } from '../env';
 import { presignGet } from './storage';
 
+/** Stable redirect URL for stored media; `v` changes whenever the file does (cache busting). */
 function mediaUrl(userId: string, kind: 'avatar' | 'banner', key: string | null, still = false): string | null {
+  return keyedUrl(`users/${userId}/${kind}`, key, still);
+}
+
+function keyedUrl(path: string, key: string | null, still = false): string | null {
   if (!key) return null;
   const v = createHash('sha1').update(key).digest('hex').slice(0, 10);
-  return `${env.PUBLIC_API_URL}/users/${userId}/${kind}?v=${v}${still ? '&static=1' : ''}`;
+  return `${env.PUBLIC_API_URL}/${path}?v=${v}${still ? '&static=1' : ''}`;
 }
 
 export function avatarUrl(user: Pick<User, 'id' | 'avatarKey'>): string | null {
@@ -49,6 +54,9 @@ export function toSessionDTO(s: Session): SessionDTO {
     accountsOnly: s.accountsOnly,
     membersCanMentionEveryone: s.membersCanMentionEveryone,
     createdAt: s.createdAt.toISOString(),
+    iconUrl: keyedUrl(`sessions/${s.id}/icon`, s.iconKey),
+    iconStaticUrl: keyedUrl(`sessions/${s.id}/icon`, s.iconStaticKey ?? s.iconKey, !!s.iconStaticKey),
+    sleepingSince: s.sleepingSince?.toISOString() ?? null,
   };
 }
 
@@ -59,6 +67,7 @@ export function toMemberDTO(m: SessionMember & { user: User }): MemberDTO {
     nickname: m.nickname,
     firstVisitedAt: m.firstVisitedAt.toISOString(),
     serverMuted: m.serverMuted,
+    timeoutUntil: m.timeoutUntil && m.timeoutUntil.getTime() > Date.now() ? m.timeoutUntil.toISOString() : null,
   };
 }
 
@@ -91,7 +100,18 @@ export async function toAttachmentDTO(a: Attachment): Promise<AttachmentDTO> {
   };
 }
 
-export async function toMessageDTO(m: Message & { attachments: Attachment[] }): Promise<MessageDTO> {
+/** Groups reaction rows by emoji, in order of first use. */
+export function toReactionDTOs(rows: Reaction[]): ReactionDTO[] {
+  const out = new Map<string, ReactionDTO>();
+  for (const r of [...rows].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())) {
+    const entry = out.get(r.emoji) ?? { emoji: r.emoji, userIds: [] };
+    entry.userIds.push(r.userId);
+    out.set(r.emoji, entry);
+  }
+  return [...out.values()];
+}
+
+export async function toMessageDTO(m: Message & { attachments: Attachment[]; reactions?: Reaction[] }): Promise<MessageDTO> {
   return {
     id: m.id,
     channelId: m.channelId,
@@ -103,6 +123,7 @@ export async function toMessageDTO(m: Message & { attachments: Attachment[] }): 
     attachments: await Promise.all(
       [...m.attachments].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map(toAttachmentDTO),
     ),
+    reactions: toReactionDTOs(m.reactions ?? []),
     createdAt: m.createdAt.toISOString(),
     editedAt: m.editedAt?.toISOString() ?? null,
   };
