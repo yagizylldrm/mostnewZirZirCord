@@ -1,7 +1,8 @@
 import { can, type BanDTO } from '@zirzircord/shared';
+import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { Alert, Text, TextInput, View } from 'react-native';
-import { Avatar, Btn, Sheet, ToggleRow } from '../components/ui';
+import { Avatar, Btn, SessionPicture, Sheet, ToggleRow } from '../components/ui';
 import { C, s } from '../theme';
 import { useApp, zz } from '../zz';
 
@@ -22,8 +23,30 @@ export function SessionSettingsSheet({ sessionId, visible, onClose }: { sessionI
   const isOwner = view.myRole === 'OWNER';
   const update = (input: Parameters<typeof zz.api.updateSession>[1]) => zz.attempt(() => zz.api.updateSession(sessionId, input));
 
+  const pickIcon = async () => {
+    const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9, allowsEditing: true, aspect: [1, 1] });
+    if (r.canceled) return;
+    const a = r.assets[0];
+    const blob = await (await fetch(a.uri)).blob();
+    const mime = a.mimeType && /png|jpeg|webp|gif/.test(a.mimeType) ? a.mimeType : 'image/jpeg';
+    if (await zz.attempt(() => zz.setSessionIcon(sessionId, blob, mime))) zz.notify('Session picture updated', 'success');
+  };
+
   return (
     <Sheet visible={visible} title="Session settings" onClose={onClose}>
+      {sess.isSet && can(view.myRole, 'session.editSettings') && (
+        <View style={[s.card, s.row, { gap: 12 }]}>
+          <SessionPicture session={sess} size={56} />
+          <View style={s.flex}>
+            <Text style={[s.text, { fontWeight: '700' }]}>Session picture</Text>
+            <Text style={s.muted}>Shown in everyone's session list.</Text>
+          </View>
+          <View style={{ gap: 6 }}>
+            <Btn variant="secondary" title={sess.iconUrl ? 'Change' : 'Upload'} onPress={pickIcon} />
+            {sess.iconUrl && <Btn variant="secondary" title="Remove" onPress={() => zz.attempt(() => zz.setSessionIcon(sessionId, null))} />}
+          </View>
+        </View>
+      )}
       <View style={s.card}>
         <ToggleRow
           title="Set session"

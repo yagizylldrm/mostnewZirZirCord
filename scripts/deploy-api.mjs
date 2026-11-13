@@ -78,8 +78,14 @@ const apiUrl = `https://${domain}`;
 const serverEnv = {
   API_DOMAIN: domain,
   PUBLIC_API_URL: apiUrl,
-  // localhost:14320 = the Tauri desktop app, which serves its UI from there.
-  CORS_ORIGINS: cfg.CORS_ORIGINS || 'https://zirzircord*.vercel.app,http://localhost:5173,http://localhost:14320',
+  // Exact origins only: a pattern like zirzircord*.vercel.app would also match anyone's
+  // "zirzircord-xyz" Vercel project. localhost:14320 = the Tauri desktop app's UI.
+  // Add preview deployments in infra/.env.cloud, e.g. https://zirzircord-*-<team>.vercel.app
+  CORS_ORIGINS: cfg.CORS_ORIGINS || 'https://zirzircord.vercel.app,http://localhost:5173,http://localhost:14320',
+  // 'log' lets older phone / Electron builds (without the app header) keep working during a rollout.
+  CLIENT_CHECK: cfg.CLIENT_CHECK || 'enforce',
+  SESSION_SLEEP_DAYS: cfg.SESSION_SLEEP_DAYS || '5',
+  SESSION_DELETE_AFTER_SLEEP_DAYS: cfg.SESSION_DELETE_AFTER_SLEEP_DAYS || '30',
   DATABASE_URL: cfg.DATABASE_URL,
   JWT_SECRET: cfg.JWT_SECRET,
   PRESENCE_GRACE_SECONDS: cfg.PRESENCE_GRACE_SECONDS || '30',

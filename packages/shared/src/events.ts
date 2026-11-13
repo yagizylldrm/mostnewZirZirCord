@@ -2,6 +2,7 @@ import type {
   ChannelDTO,
   MemberDTO,
   MessageDTO,
+  ReactionDTO,
   PresenceState,
   PublicUser,
   SessionDTO,
@@ -13,8 +14,8 @@ export type Ack<T> = (res: { ok: true; data: T } | { ok: false; error: string; m
 /** Events the server pushes to clients. */
 export interface ServerToClientEvents {
   'session:updated': (session: SessionDTO) => void;
-  /** Temporary session closed (everyone left) or deleted by owner. */
-  'session:closed': (p: { sessionId: string; reason: 'empty' | 'deleted' }) => void;
+  /** Temporary session closed (everyone left), deleted by owner, or deleted after sleeping too long. */
+  'session:closed': (p: { sessionId: string; reason: 'empty' | 'deleted' | 'expired' }) => void;
   'presence:update': (p: PresenceState) => void;
   'member:upsert': (p: { sessionId: string; member: MemberDTO }) => void;
   'member:removed': (p: { sessionId: string; userId: string }) => void;
@@ -27,6 +28,7 @@ export interface ServerToClientEvents {
   'message:new': (m: MessageDTO) => void;
   'message:updated': (m: MessageDTO) => void;
   'message:deleted': (p: { channelId: string; messageId: string }) => void;
+  'reaction:update': (p: { channelId: string; messageId: string; reactions: ReactionDTO[] }) => void;
   typing: (p: { channelId: string; userId: string }) => void;
   'voice:state': (p: { sessionId: string; channelId: string; participants: string[] }) => void;
   'user:updated': (u: PublicUser) => void;

@@ -160,7 +160,7 @@ The API runs on Railway, so the site no longer depends on your computer. `railwa
    | `DATABASE_URL` | Supabase session pooler URL (port 5432) |
    | `REDIS_URL` | `${{Redis.REDIS_URL}}` (Railway fills it in) |
    | `JWT_SECRET` | the same value as before, so users stay signed in (`openssl rand -hex 48` for a new one) |
-   | `CORS_ORIGINS` | `https://zirzircord*.vercel.app,http://localhost:5173` |
+   | `CORS_ORIGINS` | `https://zirzircord.vercel.app,http://localhost:5173,http://localhost:14320` |
    | `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT` | the Supabase S3 endpoint (both the same) |
    | `S3_REGION`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | from Supabase |
    | `S3_BUCKET` | `zirzircord` |
@@ -198,7 +198,13 @@ Voice quality depends on the server's bandwidth. Each listener receives every ac
 - **Single API instance.** Presence grace timers are in-process. Running several API replicas needs a shared job queue (e.g. BullMQ) and the Socket.IO Redis adapter.
 - **iOS screen sharing** needs the Broadcast Upload Extension described above.
 - **Android background calls.** A call keeps running while you switch apps briefly, but a long background call needs a foreground-service notification (e.g. with Notifee).
-- **Not built yet:** friends/DMs, reactions, push notifications, message search, end-to-end encryption.
+- **Not built yet:** friends/DMs, push notifications, message search, end-to-end encryption.
+
+## Abuse protection
+
+- **App-only API.** Requests from any website not listed in `CORS_ORIGINS` are refused, and requests without a web origin must come from the official apps (they send an `X-ZZ-Client` header). This stops other sites and casual scripts. It can't stop someone who copies the header and uses their own login token: that is what the limits below are for. Older phone or Electron builds don't send the header yet; set `CLIENT_CHECK=log` on the server to let them in until everyone has updated.
+- **Spam timeouts.** Each user can send 5 messages per 5 s in a session (15 per 10 s across sessions). Going over times them out automatically for 1 min, then 5 min, then 15 min (strikes reset after an hour). Owners and mods can also time a member out by hand from their profile. Timed-out members can read but not write or react.
+- **Sleeping set sessions.** A set session nobody has opened or written in for 5 days falls asleep (💤). Opening it wakes it. After 30 days asleep it is deleted with its messages and files; members see a countdown in the last 7 days. Tune with `SESSION_SLEEP_DAYS` and `SESSION_DELETE_AFTER_SLEEP_DAYS`.
 
 ## Desktop app (Tauri)
 

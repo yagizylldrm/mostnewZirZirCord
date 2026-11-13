@@ -20,6 +20,33 @@ export const LIMITS = {
   messagePageSize: 50,
 } as const;
 
+/** Set sessions with no activity go to sleep, then get deleted (days). */
+export const SLEEP = { afterDays: 5, deleteAfterDays: 30, warnDays: 7 } as const;
+
+/** Spam protection: messages allowed per window, and the escalating automatic timeouts. */
+export const SPAM = {
+  sessionMax: 5,
+  sessionWindowMs: 5_000,
+  globalMax: 15,
+  globalWindowMs: 10_000,
+  /** Timeout for the 1st, 2nd, 3rd+ strike within an hour (ms). */
+  timeoutsMs: [60_000, 5 * 60_000, 15 * 60_000],
+  reactionMax: 10,
+  reactionWindowMs: 5_000,
+} as const;
+
+/** Manual timeout lengths a moderator can pick (minutes). */
+export const TIMEOUT_MINUTES = [1, 5, 10, 60, 1440, 10080] as const;
+
+export const MAX_REACTIONS_PER_MESSAGE = 20;
+/** Quick picks shown next to the full emoji picker. */
+export const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👀'] as const;
+
+/** Header every official client sends (`<platform>/<version>`). */
+export const CLIENT_HEADER = 'x-zz-client';
+export const CLIENT_PLATFORMS = ['web', 'desktop', 'tauri', 'mobile'] as const;
+export type ClientPlatform = (typeof CLIENT_PLATFORMS)[number];
+
 export const STATUSES = ['ONLINE', 'IDLE', 'DND', 'INVISIBLE'] as const;
 export type UserStatus = (typeof STATUSES)[number];
 

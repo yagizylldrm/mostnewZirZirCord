@@ -11,13 +11,18 @@ import {
   normalizeSessionCode,
   notifySettingsSchema,
   serverMuteSchema,
+  timeoutSchema,
   updateMemberSchema,
   updateSessionSchema,
 } from '@zirzircord/shared';
 import type { BanDTO, SetSessionListItem } from '@zirzircord/shared';
 import { prisma } from '../lib/db';
+import { randomUUID } from 'node:crypto';
 import { badRequest, forbidden, notFound } from '../lib/errors';
+import { setTimeoutUntil } from '../lib/spam';
 import { toMemberDTO, toPublicUser, toSessionDTO } from '../lib/serializers';
+import { deleteKeys, presignGet, putObject } from '../lib/storage';
+import { consumeMediaUpload } from '../users/routes';
 import { kickFromSessionVoice, roomName, setMicAllowed } from '../voice/livekit';
 import type { FastifyInstance as App } from 'fastify';
 import { isSessionBanned, requireMember } from './access';
@@ -161,9 +166,43 @@ export async function sessionRoutes(app: FastifyInstance) {
       const owner = await prisma.user.findUniqueOrThrow({ where: { id: m.session.ownerId } });
       if (body.isSet && owner.isGuest) throw forbidden('Create an account to make set sessions', 'account_required');
     }
-    const session = await prisma.session.update({ where: { id }, data: body });
+    const { iconUploadId, ...settings } = body;
+    const data: Record<string, unknown> = { ...settings };
+    const obsolete: (string | null)[] = [];
+    if (iconUploadId !== undefined) {
+      // Pictures are for set sessions (temporary ones vanish when empty anyway).
+      if (iconUploadId && !(body.isSet ?? m.session.isSet)) throw badRequest('Only set sessions can have a picture', 'set_only');
+      obsolete.push(m.session.iconKey, m.session.iconStaticKey);
+      data.iconKey = null;
+      data.iconStaticKey = null;
+      if (iconUploadId) {
+        const img = await consumeMediaUpload(req.auth.userId, iconUploadId, 'sessionIcon');
+        // Under sessions/<id>/ so it is removed together with the session.
+        const base = `sessions/${id}/icon/${randomUUID()}`;
+        await putObject(`${base}.webp`, img.main, 'image/webp');
+        data.iconKey = `${base}.webp`;
+        if (img.still) {
+          await putObject(`${base}.still.webp`, img.still, 'image/webp');
+          data.iconStaticKey = `${base}.still.webp`;
+        }
+      }
+    }
+    const session = await prisma.session.update({ where: { id }, data });
+    const stale = obsolete.filter((k): k is string => !!k && k !== session.iconKey && k !== session.iconStaticKey);
+    if (stale.length) await deleteKeys(stale).catch(() => {});
     app.io.to(rooms.session(id)).emit('session:updated', toSessionDTO(session));
     return { session: toSessionDTO(session) };
+  });
+
+  /** Stable session picture URL usable directly in <img> (`?static=1` = first frame). */
+  app.get('/sessions/:id/icon', async (req, reply) => {
+    const { id } = sid.parse(req.params);
+    const still = (req.query as Record<string, string>).static === '1';
+    const s = await prisma.session.findUnique({ where: { id }, select: { iconKey: true, iconStaticKey: true } });
+    const key = (still && s?.iconStaticKey) || s?.iconKey;
+    if (!key) throw notFound('Session picture');
+    reply.header('Cache-Control', 'public, max-age=3600');
+    return reply.redirect(await presignGet(key));
   });
 
   app.post('/sessions/:id/rotate-code', auth, async (req) => {
@@ -220,6 +259,20 @@ export async function sessionRoutes(app: FastifyInstance) {
     if (userId === req.auth.userId || !canModerate(actor.role, target.role)) throw forbidden('You cannot mute this member');
     await applyServerMute(app, id, userId, muted);
     return { ok: true };
+  });
+
+  // ---------------------------------------------------------------- timeout
+
+  /** Moderators time members out: they can still read, but can't write or react. */
+  app.post('/sessions/:id/members/:userId/timeout', auth, async (req) => {
+    const { id, userId } = sidUid.parse(req.params);
+    const { minutes } = timeoutSchema.parse(req.body);
+    const actor = await requirePermission(id, req.auth.userId, 'session.timeout');
+    const target = await requireMember(id, userId).catch(() => null);
+    if (!target) throw notFound('Member');
+    if (userId === req.auth.userId || !canModerate(actor.role, target.role)) throw forbidden('You cannot time out this member');
+    const m = await setTimeoutUntil(app.io, id, userId, minutes ? new Date(Date.now() + minutes * 60_000) : null);
+    return { member: toMemberDTO(m) };
   });
 
   // -------------------------------------------------------- roles (by public id)

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ATTACHMENT_KINDS, AUDIO_PRESETS, LIMITS, NOTIFY_LEVELS, PROFILE_IMAGE_MAX_BYTES, PROFILE_IMAGE_MIMES, STATUSES } from './constants';
+import { ATTACHMENT_KINDS, AUDIO_PRESETS, LIMITS, NOTIFY_LEVELS, PROFILE_IMAGE_MAX_BYTES, PROFILE_IMAGE_MIMES, STATUSES, TIMEOUT_MINUTES } from './constants';
 
 const name = (max: number) => z.string().trim().min(1).max(max);
 
@@ -48,7 +48,7 @@ export const deleteAccountSchema = z.object({
 });
 
 export const mediaUploadSchema = z.object({
-  purpose: z.enum(['avatar', 'banner', 'sticker']),
+  purpose: z.enum(['avatar', 'banner', 'sticker', 'sessionIcon']),
   mime: z.enum(PROFILE_IMAGE_MIMES),
   size: z.number().int().positive().max(PROFILE_IMAGE_MAX_BYTES),
 });
@@ -83,7 +83,26 @@ export const updateSessionSchema = z.object({
   membersCanCreateVoice: z.boolean().optional(),
   accountsOnly: z.boolean().optional(),
   membersCanMentionEveryone: z.boolean().optional(),
+  /** Finished `/me/media-upload` (purpose sessionIcon); null removes the picture. Set sessions only. */
+  iconUploadId: z.string().uuid().nullable().optional(),
 });
+
+export const timeoutSchema = z.object({
+  /** null removes the timeout. */
+  minutes: z
+    .number()
+    .int()
+    .refine((m) => (TIMEOUT_MINUTES as readonly number[]).includes(m), 'Unsupported timeout length')
+    .nullable(),
+});
+
+/** One emoji (with skin tones / ZWJ sequences / flags), never plain text. */
+export const reactionEmojiSchema = z
+  .string()
+  .min(1)
+  .max(32)
+  .regex(/^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|\p{Emoji_Component}|\p{Emoji_Modifier}|\u200d|\ufe0f|\u20e3)+$/u, 'Not an emoji')
+  .refine((e) => /\p{Extended_Pictographic}|\p{Regional_Indicator}{2}|\u20e3/u.test(e), 'Not an emoji');
 
 export const updateMemberSchema = z.object({
   nickname: z.string().trim().max(LIMITS.nickname).nullable().optional(),
@@ -149,4 +168,5 @@ export type UpdateChannelInput = z.infer<typeof updateChannelSchema>;
 export type SendMessageInput = z.input<typeof sendMessageSchema>;
 export type CreateUploadInput = z.infer<typeof createUploadSchema>;
 export type MediaUploadInput = z.infer<typeof mediaUploadSchema>;
+export type TimeoutInput = z.infer<typeof timeoutSchema>;
 export type NotifySettingsInput = z.infer<typeof notifySettingsSchema>;

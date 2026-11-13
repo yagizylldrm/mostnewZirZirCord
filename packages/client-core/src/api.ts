@@ -5,10 +5,12 @@ import type {
   ChannelDTO,
   CreateChannelInput,
   CreateUploadInput,
+  MemberDTO,
   MessageDTO,
   NotifySettings,
   NotifySettingsInput,
   PublicUser,
+  ReactionDTO,
   SelfUser,
   SendMessageInput,
   SessionDTO,
@@ -20,6 +22,7 @@ import type {
   UploadTicket,
   VoiceTokenResponse,
 } from '@zirzircord/shared';
+import { CLIENT_HEADER } from '@zirzircord/shared';
 import type { KeyValueStorage } from './platform';
 import { randomId } from './platform';
 
@@ -52,6 +55,8 @@ interface SavedAccount {
   tokens: AuthTokens;
 }
 
+export type MediaPurpose = 'avatar' | 'banner' | 'sticker' | 'sessionIcon';
+
 /**
  * Thin typed REST client. Refreshes the access token automatically on 401 and
  * persists tokens in the platform storage.
@@ -67,6 +72,8 @@ export class ApiClient {
   constructor(
     public baseUrl: string,
     private storage: KeyValueStorage,
+    /** X-ZZ-Client value, e.g. "web/0.1.0". */
+    public client: string,
   ) {}
 
   async init() {
@@ -177,7 +184,7 @@ export class ApiClient {
         try {
           const res = await fetch(`${this.baseUrl}/auth/refresh`, {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: { 'content-type': 'application/json', [CLIENT_HEADER]: this.client },
             body: JSON.stringify({ refreshToken: this.tokens.refreshToken, deviceId: this.deviceId }),
           });
           if (res.status === 401) {
@@ -204,6 +211,7 @@ export class ApiClient {
       res = await fetch(this.baseUrl + path, {
         method,
         headers: {
+          [CLIENT_HEADER]: this.client,
           ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
           ...(this.tokens ? { authorization: `Bearer ${this.tokens.accessToken}` } : {}),
         },
@@ -260,7 +268,7 @@ export class ApiClient {
   async updateProfile(input: UpdateProfileInput) {
     return (await this.request<{ user: SelfUser }>('PATCH', '/me', input)).user;
   }
-  mediaUploadTicket(purpose: 'avatar' | 'banner' | 'sticker', mime: string, size: number) {
+  mediaUploadTicket(purpose: MediaPurpose, mime: string, size: number) {
     return this.request<UploadTicket>('POST', '/me/media-upload', { purpose, mime, size });
   }
 
@@ -352,6 +360,10 @@ export class ApiClient {
   voiceToken(channelId: string) {
     return this.request<VoiceTokenResponse>('POST', `/channels/${channelId}/voice-token`);
   }
+  /** Moderator timeout: `minutes` null removes it. */
+  async timeoutMember(sessionId: string, userId: string, minutes: number | null) {
+    return (await this.request<{ member: MemberDTO }>('POST', `/sessions/${sessionId}/members/${userId}/timeout`, { minutes })).member;
+  }
   /** Session-wide moderator mute (removes the right to use a microphone). */
   serverMute(sessionId: string, userId: string, muted: boolean) {
     return this.request('POST', `/sessions/${sessionId}/server-mute/${userId}`, { muted });
@@ -382,6 +394,12 @@ export class ApiClient {
   }
   deleteMessage(id: string) {
     return this.request('DELETE', `/messages/${id}`);
+  }
+  async react(messageId: string, emoji: string) {
+    return (await this.request<{ reactions: ReactionDTO[] }>('PUT', `/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`)).reactions;
+  }
+  async unreact(messageId: string, emoji: string) {
+    return (await this.request<{ reactions: ReactionDTO[] }>('DELETE', `/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`)).reactions;
   }
   uploadTicket(sessionId: string, input: CreateUploadInput) {
     return this.request<UploadTicket>('POST', `/sessions/${sessionId}/uploads`, input);

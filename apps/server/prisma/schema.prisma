@@ -77,6 +77,7 @@ model User {
   ownedSessions Session[]       @relation("SessionOwner")
   messages      Message[]
   stickers      Sticker[]
+  reactions     Reaction[]
 }
 
 model RefreshToken {
@@ -103,6 +104,13 @@ model Session {
   accountsOnly              Boolean      @default(false)
   membersCanMentionEveryone Boolean      @default(false)
   createdAt                 DateTime     @default(now())
+  /// Set sessions only: processed picture (webp) + first frame.
+  iconKey                   String?
+  iconStaticKey             String?
+  /// Last time anyone entered or wrote in the session (drives sleeping, see sessions/sleep.ts).
+  lastActiveAt              DateTime     @default(now())
+  /// Set sessions asleep after SESSION_SLEEP_DAYS idle; deleted after SESSION_DELETE_AFTER_SLEEP_DAYS asleep.
+  sleepingSince             DateTime?
 
   // Restrict: deleting a user must hand ownership over first (see users/deletion.ts).
   owner       User            @relation("SessionOwner", fields: [ownerId], references: [id], onDelete: Restrict)
@@ -122,6 +130,8 @@ model SessionMember {
   notifyLevel    NotifyLevel @default(ALL)
   mutedUntil     DateTime?
   serverMuted    Boolean     @default(false)
+  /// Can read but not send/react until then (automatic spam timeout or set by a moderator).
+  timeoutUntil   DateTime?
 
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -213,8 +223,21 @@ model Message {
   channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
   author      User?        @relation(fields: [authorId], references: [id], onDelete: SetNull)
   attachments Attachment[]
+  reactions   Reaction[]
 
   @@index([channelId, createdAt])
+}
+
+model Reaction {
+  messageId String   @db.Uuid
+  userId    String   @db.Uuid
+  emoji     String
+  createdAt DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId, emoji])
+  @@index([messageId])
 }
 
 /// Uploaded file. Starts "pending" (messageId null) until attached to a message.

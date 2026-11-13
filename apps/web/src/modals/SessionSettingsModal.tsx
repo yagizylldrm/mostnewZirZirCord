@@ -1,8 +1,9 @@
-import { can, canModerate, formatSessionCode, type BanDTO } from '@zirzircord/shared';
+import { PROFILE_IMAGE_MAX_BYTES, can, canModerate, formatSessionCode, type BanDTO, type SessionDTO } from '@zirzircord/shared';
 import { listedMembers, memberName } from '@zirzircord/client-core';
 import { Copy, RefreshCw } from 'lucide-react';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { Avatar, Button, Field, Modal, RoleBadge, ToggleRow, cx, inputCls } from '../components/ui';
+import { SessionPicture } from '../components/SessionPicture';
 import { copyText } from '../lib/format';
 import { closeModal, useApp, zz } from '../lib/zz';
 
@@ -61,6 +62,7 @@ export function SessionSettingsModal() {
           </Field>
           <Button disabled={name.trim() === s.name || !name.trim()}>Save</Button>
         </form>
+        {can(view.myRole, 'session.editSettings') && <PictureSetting s={s} />}
         <div className="rounded-lg bg-side p-3">
           <div className="text-xs font-bold text-muted">INVITE CODE</div>
           <div className="flex items-center gap-2">
@@ -292,4 +294,49 @@ export function SessionSettingsModal() {
       </div>
     );
   }
+}
+
+/** Set sessions can have a picture (owner and mods). Temporary ones keep their initials. */
+function PictureSetting({ s }: { s: SessionDTO }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const run = async (f: File | null) => {
+    if (f && f.size > PROFILE_IMAGE_MAX_BYTES) return zz.notify('Images can be at most 10 MB', 'error');
+    setBusy(true);
+    const ok = await zz.attempt(() => zz.setSessionIcon(s.id, f, f?.type));
+    setBusy(false);
+    if (ok) zz.notify(f ? 'Session picture updated' : 'Session picture removed', 'success');
+  };
+  return (
+    <div className="flex items-center gap-4 rounded-lg bg-side p-3">
+      <SessionPicture s={s} className="size-16 rounded-2xl text-xl" animate />
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-semibold">Session picture</div>
+        <p className="text-xs text-muted">{s.isSet ? 'PNG, JPEG, WebP or GIF, up to 10 MB. Shown in everyone’s session list.' : 'Only set sessions can have a picture.'}</p>
+      </div>
+      {s.isSet && (
+        <div className="flex shrink-0 gap-2">
+          <Button variant="secondary" disabled={busy} onClick={() => fileRef.current?.click()}>
+            {busy ? 'Uploading…' : s.iconUrl ? 'Change' : 'Upload'}
+          </Button>
+          {s.iconUrl && (
+            <Button variant="secondary" disabled={busy} onClick={() => run(null)}>
+              Remove
+            </Button>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = '';
+              if (f) run(f);
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
 }

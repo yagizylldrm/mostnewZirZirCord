@@ -17,6 +17,15 @@ const schema = z.object({
   UPLOAD_QUOTA_MB_USER: z.coerce.number().positive().default(2000),
   /** Guest accounts are deleted after being offline this long. */
   GUEST_TTL_HOURS: z.coerce.number().positive().default(24),
+  /** Set sessions with no activity for this long go to sleep… */
+  SESSION_SLEEP_DAYS: z.coerce.number().positive().default(5),
+  /** …and are deleted after sleeping this long. */
+  SESSION_DELETE_AFTER_SLEEP_DAYS: z.coerce.number().positive().default(30),
+  /**
+   * 'enforce': requests must come from an allowed web origin or carry the official app header.
+   * 'log': only log offenders (lets old phone/desktop builds work during a rollout).
+   */
+  CLIENT_CHECK: z.enum(['enforce', 'log']).default('enforce'),
   S3_ENDPOINT: z.string().url(),
   S3_PUBLIC_ENDPOINT: z.string().url(),
   S3_REGION: z.string().default('us-east-1'),
