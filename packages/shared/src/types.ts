@@ -49,6 +49,11 @@ export interface SessionDTO extends SessionSettings {
   isSet: boolean;
   state: SessionState;
   createdAt: string;
+  /** Set sessions only. Null = show initials. */
+  iconUrl: string | null;
+  iconStaticUrl: string | null;
+  /** Set when a set session went to sleep after SLEEP.afterDays without activity (ISO). */
+  sleepingSince: string | null;
 }
 
 export interface MemberDTO {
@@ -58,6 +63,8 @@ export interface MemberDTO {
   firstVisitedAt: string;
   /** Muted by a moderator: cannot publish a microphone anywhere in the session. */
   serverMuted: boolean;
+  /** Timed out (spam or by a moderator) until this ISO date: can read, can't send or react. */
+  timeoutUntil: string | null;
 }
 
 export interface PresenceEntry {
@@ -110,8 +117,15 @@ export interface MessageDTO {
   /** Echo of the sender's client nonce (only on the realtime/POST response of a new message). */
   nonce?: string;
   attachments: AttachmentDTO[];
+  /** In order of first use. A null user id = a reaction from a deleted account (never stored that way; kept for type safety). */
+  reactions: ReactionDTO[];
   createdAt: string;
   editedAt: string | null;
+}
+
+export interface ReactionDTO {
+  emoji: string;
+  userIds: string[];
 }
 
 export interface BanDTO {

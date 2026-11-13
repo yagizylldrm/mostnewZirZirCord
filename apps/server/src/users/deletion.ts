@@ -84,7 +84,7 @@ export async function deleteUserAccount(ctx: Ctx, userId: string) {
   });
   await deleteKeys(pending.flatMap((a) => [a.storageKey, a.thumbnailKey].filter(Boolean) as string[])).catch(() => {});
   await prisma.attachment.deleteMany({ where: { id: { in: pending.map((a) => a.id) } } });
-  for (const prefix of ['avatars', 'banners', 'stickers', 'sticker-uploads']) {
+  for (const prefix of ['avatars', 'banners', 'stickers', 'sticker-uploads', 'session-icon-uploads']) {
     await deletePrefix(`${prefix}/${userId}/`).catch(() => {});
   }
   await prisma.channelMute.deleteMany({ where: { userId } });

@@ -1,8 +1,10 @@
+import { SLEEP } from '@zirzircord/shared';
 import { Crown, LogIn, Plus, Radio, Trash2 } from 'lucide-react';
-import { colorFor, initials } from '../lib/format';
+import { sleepLabel } from '@zirzircord/client-core';
 import { openModal, useApp, zz } from '../lib/zz';
 import { UserPanel } from './UserPanel';
-import { Button, Logo } from './ui';
+import { SessionPicture } from './SessionPicture';
+import { Button, Logo, cx } from './ui';
 
 export function Home() {
   const { me, setSessions, openSessions, sessions } = useApp((s) => ({
@@ -59,7 +61,7 @@ export function Home() {
               <h2 className="text-xs font-bold tracking-wider text-muted uppercase">Still running</h2>
               {rejoinable.map((i) => (
                 <div key={i.session.id} className="flex items-center gap-3 rounded-lg bg-side p-3">
-                  <SessionBadge id={i.session.id} name={i.session.name} />
+                  <SessionPicture s={i.session} className="size-10 rounded-xl" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">{i.session.name}</div>
                     <div className="text-xs text-muted">{i.presentCount} online</div>
@@ -74,28 +76,35 @@ export function Home() {
             <h2 className="text-xs font-bold tracking-wider text-muted uppercase">Set sessions</h2>
             {setSessions.length === 0 ? (
               <p className="rounded-lg border border-dashed border-line p-5 text-sm text-muted">
-                Set sessions are permanent sessions you have visited. Open one any time: if nobody is there, you start hosting it.
+                Set sessions are saved sessions you have visited. Open one any time: if nobody is there, you start hosting it. A set session nobody opens
+                for {SLEEP.afterDays + SLEEP.deleteAfterDays} days is deleted with all its messages and files.
               </p>
             ) : (
               setSessions.map((i) => {
                 const inside = !!sessions[i.session.id];
                 return (
                   <div key={i.session.id} className="flex items-center gap-3 rounded-lg bg-side p-3">
-                    <SessionBadge id={i.session.id} name={i.session.name} />
+                    <SessionPicture s={i.session} className="size-10 rounded-xl" />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 truncate font-medium">
                         {i.session.name}
                         {i.session.ownerId === me.id && <Crown size={14} className="text-owner" />}
                       </div>
-                      <div className="flex items-center gap-1.5 text-xs text-muted">
-                        {i.live ? (
-                          <>
-                            <Radio size={12} className="text-ok" /> Live · {i.presentCount} online
-                          </>
-                        ) : (
-                          'Nobody here right now'
-                        )}
-                      </div>
+                      {sleepLabel(i.session) ? (
+                        <div className={cx('text-xs', sleepLabel(i.session)!.urgent ? 'font-medium text-warn' : 'text-muted')}>
+                          {sleepLabel(i.session)!.text}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-xs text-muted">
+                          {i.live ? (
+                            <>
+                              <Radio size={12} className="text-ok" /> Live · {i.presentCount} online
+                            </>
+                          ) : (
+                            'Nobody here right now'
+                          )}
+                        </div>
+                      )}
                     </div>
                     {inside ? (
                       <Button variant="secondary" onClick={() => zz.setActiveSession(i.session.id)}>
@@ -108,10 +117,12 @@ export function Home() {
                       <button
                         title="Remove from my list"
                         className="p-2 text-faint hover:text-danger"
-                        onClick={() => zz.attempt(async () => {
-                          await zz.api.forgetSession(i.session.id);
-                          await zz.refreshSidebar();
-                        })}
+                        onClick={() =>
+                          zz.attempt(async () => {
+                            await zz.api.forgetSession(i.session.id);
+                            await zz.refreshSidebar();
+                          })
+                        }
                       >
                         <Trash2 size={16} />
                       </button>
@@ -126,14 +137,6 @@ export function Home() {
       <div className="border-t border-black/30 bg-side md:w-72 md:rounded-tr-lg">
         <UserPanel />
       </div>
-    </div>
-  );
-}
-
-function SessionBadge({ id, name }: { id: string; name: string }) {
-  return (
-    <div className="grid size-10 shrink-0 place-items-center rounded-xl font-semibold text-white" style={{ background: colorFor(id) }}>
-      {initials(name)}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { io as ioc, type Socket } from 'socket.io-client';
 import type { ClientToServerEvents, ServerToClientEvents, SessionSnapshot } from '@zirzircord/shared';
 import { buildApp } from '../src/app';
+import { redis } from '../src/lib/redis';
 import { ensureBucket } from '../src/lib/storage';
 
 export type TestSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -39,6 +40,7 @@ export class Client {
       method,
       headers: {
         'x-forwarded-for': this.ip,
+        'x-zz-client': 'web/test',
         ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
         ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
       },
@@ -73,7 +75,7 @@ export class Client {
   }
 
   async connect() {
-    this.socket = ioc(this.base, { auth: { token: this.token }, transports: ['websocket'], forceNew: true });
+    this.socket = ioc(this.base, { auth: { token: this.token, client: 'web/test' }, transports: ['websocket'], forceNew: true });
     this.socket.onAny((ev, payload) => this.events.push([ev, payload]));
     await new Promise<void>((res, rej) => {
       this.socket!.once('connect', () => res());
@@ -120,3 +122,9 @@ export class Client {
 const rnd = () => Math.floor(Math.random() * 254) + 1;
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Forgets a user's message counters (for tests that post many messages on purpose). */
+export async function resetSpam(userId: string) {
+  const keys = await redis.keys(`spam:*${userId}`);
+  if (keys.length) await redis.del(...keys);
+}

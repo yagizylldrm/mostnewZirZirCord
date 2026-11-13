@@ -1,12 +1,13 @@
-import { can, isJumboEmoji, splitMentions } from '@zirzircord/shared';
+import { QUICK_REACTIONS, can, isJumboEmoji, splitMentions } from '@zirzircord/shared';
 import { type LocalMessage, memberName, mentionsToText } from '@zirzircord/client-core';
 import type { MessageDTO } from '@zirzircord/shared';
-import { Hash, Pencil, Reply, Trash2, Users } from 'lucide-react';
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Clock, Hash, Pencil, Reply, SmilePlus, Trash2, Users } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { formatDay, formatTime } from '../lib/format';
 import { ui, useApp, zz } from '../lib/zz';
 import { AttachmentView } from './Attachments';
 import { Composer } from './Composer';
+import { EmojiPicker } from './EmojiPicker';
 import { Avatar, IconButton, cx } from './ui';
 
 const URL_RE = /(https?:\/\/[^\s<]+[^\s<.,:;"')\]!?])/g;
@@ -40,7 +41,17 @@ function RichText({ text, sessionId }: { text: string; sessionId: string }) {
           <button
             key={i}
             className="rounded bg-brand/20 px-1 font-medium text-brand hover:bg-brand/30"
-            onClick={(e) => part.type === 'user' && ui.setState({ profile: { userId: part.userId, sessionId, x: e.clientX, y: e.clientY } })}
+            onClick={(e) =>
+              part.type === 'user' &&
+              ui.setState({
+                profile: {
+                  userId: part.userId,
+                  sessionId,
+                  x: e.clientX,
+                  y: e.clientY,
+                },
+              })
+            }
           >
             @{part.type === 'everyone' ? 'everyone' : memberName(view, part.userId)}
           </button>
@@ -64,7 +75,11 @@ export function ChatView() {
   const { sessionId, channelId, channel } = useApp((s) => {
     const sid = s.activeSessionId!;
     const cid = s.activeChannel[sid];
-    return { sessionId: sid, channelId: cid, channel: s.sessions[sid]?.channels.find((c) => c.id === cid) };
+    return {
+      sessionId: sid,
+      channelId: cid,
+      channel: s.sessions[sid]?.channels.find((c) => c.id === cid),
+    };
   });
   const [replyTo, setReplyTo] = useState<MessageDTO | null>(null);
 
@@ -102,13 +117,19 @@ export function ChatView() {
         </IconButton>
       </header>
       <MessageList sessionId={sessionId} channelId={channel.id} onReply={setReplyTo} />
-      <Composer sessionId={sessionId} channelId={channel.id} channelName={channel.name} replyTo={replyTo} onClearReply={() => setReplyTo(null)} />
+      <ComposerOrTimeout sessionId={sessionId}>
+        <Composer sessionId={sessionId} channelId={channel.id} channelName={channel.name} replyTo={replyTo} onClearReply={() => setReplyTo(null)} />
+      </ComposerOrTimeout>
     </div>
   );
 }
 
 function MessageList({ sessionId, channelId, onReply }: { sessionId: string; channelId: string; onReply: (m: MessageDTO) => void }) {
-  const { cm, view, meId } = useApp((s) => ({ cm: s.messages[channelId], view: s.sessions[sessionId], meId: s.me!.id }));
+  const { cm, view, meId } = useApp((s) => ({
+    cm: s.messages[channelId],
+    view: s.sessions[sessionId],
+    meId: s.me!.id,
+  }));
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const prevHeight = useRef(0);
@@ -165,7 +186,11 @@ function MessageList({ sessionId, channelId, onReply }: { sessionId: string; cha
           const prev = items[i - 1];
           const newDay = !prev || new Date(prev.createdAt).toDateString() !== new Date(m.createdAt).toDateString();
           const grouped =
-            !newDay && prev && prev.authorId === m.authorId && !m.replyToId && new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60_000;
+            !newDay &&
+            prev &&
+            prev.authorId === m.authorId &&
+            !m.replyToId &&
+            new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60_000;
           return (
             <Fragment key={m.id}>
               {newDay && (
@@ -210,10 +235,36 @@ function MessageRow(p: {
   const roleColor = !authorId ? 'text-muted italic' : author?.role === 'OWNER' ? 'text-owner' : author?.role === 'MOD' ? 'text-mod' : 'text-fg';
   // Deleted users have no profile to open.
   const openProfile = (e: React.MouseEvent) =>
-    authorId && ui.setState({ profile: { userId: authorId, sessionId: p.sessionId, x: e.clientX, y: e.clientY } });
+    authorId &&
+    ui.setState({
+      profile: {
+        userId: authorId,
+        sessionId: p.sessionId,
+        x: e.clientX,
+        y: e.clientY,
+      },
+    });
 
   const me = useApp((s) => s.me!.id);
   const mentionsMe = p.m.mentions.includes(me) || p.m.mentionsEveryone;
+  const timedOut = isTimedOut(view?.members[me]?.timeoutUntil);
+  const canReact = !p.m.pending && !timedOut;
+  const [picker, setPicker] = useState<null | { below: boolean }>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const react = (emoji: string) => void zz.toggleReaction(p.m.channelId, p.m.id, emoji);
+  // Open the full picker upwards, unless the message is near the top of the window.
+  const openPicker = () =>
+    setPicker({
+      below: (rowRef.current?.getBoundingClientRect().top ?? 999) < 420,
+    });
+  const pick = useCallback(
+    (emoji: string) => {
+      setPicker(null);
+      void zz.toggleReaction(p.m.channelId, p.m.id, emoji);
+    },
+    [p.m.channelId, p.m.id],
+  );
+  const closePicker = useCallback(() => setPicker(null), []);
   const saveEdit = async () => {
     setEditing(false);
     const next = namesToTokens(draft.trim(), p.m.mentions, view);
@@ -222,6 +273,7 @@ function MessageRow(p: {
 
   return (
     <div
+      ref={rowRef}
       className={cx(
         'group relative flex gap-4 px-4 hover:bg-black/10',
         p.grouped ? 'py-0.5' : 'mt-3 pt-1 pb-0.5',
@@ -295,6 +347,7 @@ function MessageRow(p: {
             ))}
           </div>
         )}
+        {!!p.m.reactions?.length && <Reactions m={p.m} sessionId={p.sessionId} me={me} disabled={!canReact} onToggle={react} onMore={openPicker} />}
         {p.m.pending && !p.m.failed && <div className="text-[11px] text-faint">Sending…</div>}
         {p.m.failed && (
           <div className="mt-0.5 flex items-center gap-2 text-xs text-danger">
@@ -308,7 +361,34 @@ function MessageRow(p: {
           </div>
         )}
       </div>
-      <div className={cx('absolute -top-3 right-4 hidden items-center rounded-md border border-line bg-side shadow', !p.m.pending && 'group-hover:flex')}>
+      <div
+        className={cx(
+          'absolute -top-3 right-4 items-center rounded-md border border-line bg-side shadow',
+          picker ? 'flex' : 'hidden',
+          !p.m.pending && 'group-hover:flex',
+        )}
+      >
+        {canReact && (
+          <>
+            {QUICK_REACTIONS.slice(0, 3).map((e) => (
+              <button
+                key={e}
+                title={`React with ${e}`}
+                aria-label={`React with ${e}`}
+                onClick={() => react(e)}
+                className="grid size-8 place-items-center rounded-md text-base hover:bg-hover"
+              >
+                {e}
+              </button>
+            ))}
+            <div className="relative">
+              <IconButton label="Add reaction" active={!!picker} onClick={openPicker}>
+                <SmilePlus size={16} />
+              </IconButton>
+              {picker && <EmojiPicker onPick={pick} onClose={closePicker} below={picker.below} />}
+            </div>
+          </>
+        )}
         <IconButton label="Reply" onClick={p.onReply}>
           <Reply size={16} />
         </IconButton>
@@ -322,6 +402,80 @@ function MessageRow(p: {
             <Trash2 size={16} />
           </IconButton>
         )}
+      </div>
+    </div>
+  );
+}
+
+const isTimedOut = (until: string | null | undefined) => !!until && new Date(until).getTime() > Date.now();
+
+/** Reaction chips under a message: click to add / remove yours; hover shows who reacted. */
+function Reactions(p: { m: LocalMessage; sessionId: string; me: string; disabled: boolean; onToggle: (emoji: string) => void; onMore: () => void }) {
+  const view = useApp((s) => s.sessions[p.sessionId]);
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1">
+      {p.m.reactions.map((r) => {
+        const mine = r.userIds.includes(p.me);
+        const names = r.userIds.map((id) => (id === p.me ? 'You' : memberName(view, id)));
+        const who = names.length > 6 ? `${names.slice(0, 6).join(', ')} and ${names.length - 6} more` : names.join(', ');
+        return (
+          <button
+            key={r.emoji}
+            disabled={p.disabled}
+            onClick={() => p.onToggle(r.emoji)}
+            title={`${who} reacted with ${r.emoji}`}
+            aria-label={`${r.emoji} ${r.userIds.length}${mine ? ', including you' : ''}`}
+            aria-pressed={mine}
+            className={cx(
+              'flex h-7 items-center gap-1.5 rounded-lg border px-2 text-sm transition disabled:cursor-not-allowed',
+              mine ? 'border-brand bg-brand/20 text-fg' : 'border-transparent bg-side text-muted hover:border-line',
+            )}
+          >
+            <span className="text-base leading-none">{r.emoji}</span>
+            <span className="text-xs font-semibold tabular-nums">{r.userIds.length}</span>
+          </button>
+        );
+      })}
+      {!p.disabled && (
+        <button
+          onClick={p.onMore}
+          className="grid h-7 w-8 place-items-center rounded-lg bg-side text-muted opacity-0 transition group-hover:opacity-100 hover:text-fg focus:opacity-100"
+          aria-label="Add reaction"
+          title="Add reaction"
+        >
+          <SmilePlus size={15} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+const fmtLeft = (ms: number) => {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+};
+
+/** While I'm timed out the composer is replaced by a countdown (reading still works). */
+function ComposerOrTimeout({ sessionId, children }: { sessionId: string; children: React.ReactNode }) {
+  const until = useApp((s) => s.sessions[sessionId]?.members[s.me!.id]?.timeoutUntil ?? null);
+  const [, tick] = useState(0);
+  const end = until ? new Date(until).getTime() : 0;
+  useEffect(() => {
+    if (end <= Date.now()) return;
+    const t = setInterval(() => tick((n) => n + 1), 1000); // re-render every second
+    return () => clearInterval(t);
+  }, [end]);
+  const now = Date.now();
+  if (end <= now) return <>{children}</>;
+  return (
+    <div className="shrink-0 px-4 pb-4 safe-bottom">
+      <div role="status" className="flex items-center gap-3 rounded-lg bg-warn/15 px-4 py-3 text-sm text-warn">
+        <Clock size={18} className="shrink-0" />
+        <span className="flex-1">You are timed out and can’t send messages or react. You can still read the chat.</span>
+        <span className="font-mono font-semibold tabular-nums">{fmtLeft(end - now)}</span>
       </div>
     </div>
   );

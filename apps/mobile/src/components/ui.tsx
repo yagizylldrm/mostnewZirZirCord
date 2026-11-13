@@ -164,3 +164,14 @@ const glyphs = {
   mic: '🎙️', micOff: '🔇', headphones: '🎧', deaf: '🙉', camera: '📷', screen: '🖥️', leave: '📵', send: '➤', attach: '＋',
   hash: '#', voice: '🔊', crown: '👑', settings: '⚙️', members: '👥', back: '‹', close: '✕', play: '▶', pause: '❚❚', file: '📄', menu: '☰', speaker: '🔈',
 };
+
+/** A session's picture (set sessions) or its coloured initials. */
+export function SessionPicture({ session, size = 42 }: { session: { id: string; name: string; iconUrl: string | null; iconStaticUrl: string | null }; size?: number }) {
+  const radius = Math.round(size * 0.28);
+  if (session.iconUrl) return <Image source={{ uri: session.iconStaticUrl ?? session.iconUrl }} style={{ width: size, height: size, borderRadius: radius }} contentFit="cover" />;
+  return (
+    <View style={{ width: size, height: size, borderRadius: radius, backgroundColor: colorFor(session.id), alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ color: 'white', fontWeight: '700', fontSize: size * 0.36 }}>{initials(session.name)}</Text>
+    </View>
+  );
+}

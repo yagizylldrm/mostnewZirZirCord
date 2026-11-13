@@ -7,6 +7,7 @@ import { authRoutes } from './auth/routes';
 import { verifyAccessToken, assertUserActive } from './auth/tokens';
 import { channelRoutes } from './channels/routes';
 import { env } from './env';
+import { CLIENT_HEADER, checkClient, corsOriginAllowed, enforceClientCheck } from './lib/client-check';
 import { HttpError, unauthorized } from './lib/errors';
 import { clearAccessCache } from './sessions/access';
 import { messageRoutes } from './messages/routes';
@@ -18,15 +19,8 @@ import { userRoutes } from './users/routes';
 import { voiceWebhookRoutes } from './voice/webhook';
 
 export async function buildApp(opts: { logger?: boolean } = {}) {
-  // Exact origins, or patterns like https://*.vercel.app (for preview deployments).
-  const corsPatterns = env.CORS_ORIGINS.split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((p) => new RegExp(`^${p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*')}$`));
-  // Desktop (Electron file://) and mobile apps send no/opaque origins.
   // trustProxy (hop 0 only) = believe exactly one proxy hop (Caddy / cloudflared), so a client
   // can't pick its own IP with a forged X-Forwarded-For and dodge rate limits.
-  const originAllowed = (origin: string | undefined) => !origin || origin === 'null' || corsPatterns.some((re) => re.test(origin));
   // A number N trusts the N nearest proxy hops. (Fastify's own numeric form does not honour
   // X-Forwarded-For for N=1, so the same rule is written as a function.)
   const trustProxy = /^\d+$/.test(env.TRUST_PROXY)
@@ -36,12 +30,24 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
 
   await app.register(helmet, { crossOriginResourcePolicy: { policy: 'cross-origin' } });
   await app.register(cors, {
-    origin: (origin, cb) => cb(null, originAllowed(origin)),
+    origin: (origin, cb) => cb(null, corsOriginAllowed(origin)),
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'PUT'],
+    allowedHeaders: ['authorization', 'content-type', CLIENT_HEADER],
+  });
+
+  // Only our apps / website (see lib/client-check.ts). Images used in <img> tags,
+  // the health check and LiveKit's signed webhook can't send the app header.
+  const OPEN_ROUTES = new Set(['/health', '/webhooks/livekit', '/users/:id/avatar', '/users/:id/banner', '/sessions/:id/icon']);
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.method === 'OPTIONS' || OPEN_ROUTES.has(req.routeOptions.url ?? '')) return;
+    const verdict = checkClient(req.headers.origin, req.headers[CLIENT_HEADER]);
+    if (verdict.ok) return;
+    if (!enforceClientCheck()) return void req.log.warn({ origin: req.headers.origin, code: verdict.code }, 'client check failed (log only)');
+    return reply.code(403).send({ error: verdict.code, message: verdict.message });
   });
   await app.register(rateLimit, { max: 300, timeWindow: '1 minute' });
 
-  const { io, hub } = createRealtime(app.server, originAllowed);
+  const { io, hub } = createRealtime(app.server);
   app.decorate('io', io);
   app.decorate('hub', hub);
   app.decorateRequest('auth', null as any);
@@ -53,7 +59,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   });
 
   app.setErrorHandler((err, req, reply) => {
-    if (err instanceof HttpError) return reply.code(err.statusCode).send({ error: err.code, message: err.message });
+    if (err instanceof HttpError) return reply.code(err.statusCode).send({ ...err.extra, error: err.code, message: err.message });
     if (err instanceof ZodError) {
       const first = err.issues[0];
       return reply.code(400).send({ error: 'validation', message: `${first?.path.join('.') || 'input'}: ${first?.message}` });
@@ -68,7 +74,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   app.addHook('onResponse', async (req) => {
     if (req.method === 'GET' || req.method === 'OPTIONS' || req.method === 'HEAD') return;
     const route = req.routeOptions.url ?? '';
-    if (route === '/channels/:id/messages' || route === '/messages/:id' || route.startsWith('/auth/') || route === '/channels/:id/voice-token') return;
+    if (route === '/channels/:id/messages' || route.startsWith('/messages/:id') || route.startsWith('/auth/') || route === '/channels/:id/voice-token') return;
     clearAccessCache();
   });
 

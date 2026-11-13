@@ -15,7 +15,10 @@ function resolveApiUrl(): string {
   return `${location.protocol}//${location.hostname}:4000`;
 }
 
-export const zz = new ZirZirClient({ apiUrl: resolveApiUrl(), storage: webStorage });
+/** Identifies this app to the server (X-ZZ-Client): website, Electron or Tauri build. */
+const clientId = `${typeof window !== 'undefined' && window.__TAURI__ ? 'tauri' : desktop ? 'desktop' : 'web'}/${__APP_VERSION__}`;
+
+export const zz = new ZirZirClient({ apiUrl: resolveApiUrl(), storage: webStorage, client: clientId });
 export const call = new CallManager(
   zz.api,
   {
@@ -71,6 +74,8 @@ export interface UiState {
   profile: { userId: string; sessionId: string; x: number; y: number } | null;
   lightbox: string | null;
   pttKey: string;
+  /** Screen share shown in the floating mini player (stays visible over chat). */
+  miniScreen: { sessionId: string; identity: string } | null;
 }
 
 export const ui = createStore<UiState>(() => ({
@@ -80,6 +85,7 @@ export const ui = createStore<UiState>(() => ({
   drawerOpen: false,
   profile: null,
   lightbox: null,
+  miniScreen: null,
   pttKey: (() => {
     try {
       return localStorage.getItem('zz.pttKey') ?? 'Backquote';

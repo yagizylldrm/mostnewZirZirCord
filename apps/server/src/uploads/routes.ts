@@ -8,6 +8,7 @@ import { prisma } from '../lib/db';
 import { HttpError, badRequest, forbidden } from '../lib/errors';
 import { deleteKeys, isInlineSafe, presignPut, safeMime } from '../lib/storage';
 import { requireMember } from '../sessions/access';
+import { assertNotTimedOut } from '../lib/spam';
 
 const sid = z.object({ id: z.string().uuid() });
 
@@ -57,6 +58,7 @@ export async function uploadRoutes(app: FastifyInstance) {
     const { id } = sid.parse(req.params);
     const body = createUploadSchema.parse(req.body);
     const m = await requireMember(id, req.auth.userId);
+    assertNotTimedOut(m);
     const pending = await prisma.attachment.aggregate({
       where: { uploaderId: req.auth.userId, messageId: null },
       _count: true,

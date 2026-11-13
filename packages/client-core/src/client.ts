@@ -9,7 +9,8 @@ import type {
   SessionSnapshot,
   UpdateProfileInput,
 } from '@zirzircord/shared';
-import { ApiClient, ApiError, putWithProgress } from './api';
+import { ApiClient, ApiError, type MediaPurpose, putWithProgress } from './api';
+import { SLEEP } from '@zirzircord/shared';
 import type { PlatformConfig } from './platform';
 import { randomId } from './platform';
 import {
@@ -77,7 +78,7 @@ export class ZirZirClient {
   private viewing: { channelId: string | null; focused: boolean } = { channelId: null, focused: true };
 
   constructor(private config: PlatformConfig) {
-    this.api = new ApiClient(config.apiUrl, config.storage);
+    this.api = new ApiClient(config.apiUrl, config.storage, config.client);
     this.api.onAuthLost = () => this.resetToSignedOut();
   }
 
@@ -290,7 +291,7 @@ export class ZirZirClient {
     const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(this.config.apiUrl, {
       transports: ['websocket'],
       auth: (cb) => {
-        this.api.freshAccessToken().then((token) => cb({ token }));
+        this.api.freshAccessToken().then((token) => cb({ token, client: this.config.client }));
       },
       reconnectionDelayMax: 5000,
     });
@@ -323,6 +324,7 @@ export class ZirZirClient {
       const name = this.state.sessions[sessionId]?.session.name;
       this.dropSession(sessionId);
       if (reason === 'deleted' && name) this.notify(`"${name}" was deleted by its owner`);
+      if (reason === 'expired' && name) this.notify(`"${name}" was deleted after ${SLEEP.deleteAfterDays} days asleep. Its messages and files are gone.`);
       this.refreshSidebar();
     });
     socket.on('session:removed', ({ sessionId, reason }) => {
@@ -388,6 +390,7 @@ export class ZirZirClient {
       this.upsertMessage(m);
     });
     socket.on('message:updated', (m) => this.upsertMessage(m, true));
+    socket.on('reaction:update', ({ channelId, messageId, reactions }) => this.patchMessage(channelId, messageId, { reactions }));
     socket.on('message:deleted', ({ channelId, messageId }) =>
       this.set((s) => {
         const cm = s.messages[channelId];
@@ -657,6 +660,36 @@ export class ZirZirClient {
     });
   }
 
+  private patchMessage(channelId: string, messageId: string, patch: Partial<LocalMessage>) {
+    this.set((s) => {
+      const cm = s.messages[channelId];
+      if (!cm?.items.some((m) => m.id === messageId)) return {};
+      return { messages: { ...s.messages, [channelId]: { ...cm, items: cm.items.map((m) => (m.id === messageId ? { ...m, ...patch } : m)) } } };
+    });
+  }
+
+  /** Adds or removes my reaction (shown at once; the server's answer is authoritative). */
+  async toggleReaction(channelId: string, messageId: string, emoji: string) {
+    const me = this.state.me?.id;
+    const msg = this.state.messages[channelId]?.items.find((m) => m.id === messageId);
+    if (!me || !msg || msg.pending !== undefined) return;
+    const before = msg.reactions ?? [];
+    const mine = before.some((r) => r.emoji === emoji && r.userIds.includes(me));
+    const optimistic = mine
+      ? before.map((r) => (r.emoji === emoji ? { ...r, userIds: r.userIds.filter((u) => u !== me) } : r)).filter((r) => r.userIds.length)
+      : before.some((r) => r.emoji === emoji)
+        ? before.map((r) => (r.emoji === emoji ? { ...r, userIds: [...r.userIds, me] } : r))
+        : [...before, { emoji, userIds: [me] }];
+    this.patchMessage(channelId, messageId, { reactions: optimistic });
+    try {
+      const reactions = await (mine ? this.api.unreact(messageId, emoji) : this.api.react(messageId, emoji));
+      this.patchMessage(channelId, messageId, { reactions });
+    } catch (e) {
+      this.patchMessage(channelId, messageId, { reactions: before });
+      this.notify(e instanceof Error ? e.message : String(e), 'error');
+    }
+  }
+
   /** Pending sends that can be retried after a failure (nonce → what was sent). */
   private outbox = new Map<string, () => Promise<MessageDTO>>();
 
@@ -674,6 +707,7 @@ export class ZirZirClient {
       mentions: [],
       mentionsEveryone: false,
       attachments: [],
+      reactions: [],
       createdAt: new Date().toISOString(),
       editedAt: null,
       pending: true,
@@ -782,8 +816,8 @@ export class ZirZirClient {
     return me;
   }
 
-  /** Uploads a raw image for an avatar / banner / sticker and returns its upload id. */
-  async uploadMedia(purpose: 'avatar' | 'banner' | 'sticker', blob: Blob, mime: string) {
+  /** Uploads a raw image for an avatar / banner / sticker / session picture and returns its upload id. */
+  async uploadMedia(purpose: MediaPurpose, blob: Blob, mime: string) {
     const ticket = await this.api.mediaUploadTicket(purpose, mime, blob.size);
     await putWithProgress(ticket.uploadUrl, blob, ticket.headers);
     return ticket.attachmentId;
@@ -794,6 +828,11 @@ export class ZirZirClient {
   }
   async uploadBanner(blob: Blob, mime: string) {
     return this.updateProfile({ bannerUploadId: await this.uploadMedia('banner', blob, mime) });
+  }
+  /** Set sessions only (owner / mods). `blob` null removes the picture. */
+  async setSessionIcon(sessionId: string, blob: Blob | null, mime = 'image/png') {
+    const iconUploadId = blob ? await this.uploadMedia('sessionIcon', blob, mime) : null;
+    return this.api.updateSession(sessionId, { iconUploadId });
   }
 
   // -------------------------------------------------------------- stickers

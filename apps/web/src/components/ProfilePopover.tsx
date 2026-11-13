@@ -1,5 +1,5 @@
 import { can, canModerate } from '@zirzircord/shared';
-import { Copy, Crown } from 'lucide-react';
+import { Clock, Copy, Crown } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { copyText } from '../lib/format';
 import { ui, useApp, useUi, zz } from '../lib/zz';
@@ -7,9 +7,13 @@ import { Avatar, Banner, RoleBadge } from './ui';
 
 export function ProfilePopover() {
   const profile = useUi((u) => u.profile);
-  const { view, meId } = useApp((s) => ({ view: profile ? s.sessions[profile.sessionId] : undefined, meId: s.me!.id }));
+  const { view, meId } = useApp((s) => ({
+    view: profile ? s.sessions[profile.sessionId] : undefined,
+    meId: s.me!.id,
+  }));
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: 0, top: 0 });
+  const [timeoutMenu, setTimeoutMenu] = useState(false);
   const member = profile && view?.members[profile.userId];
 
   useLayoutEffect(() => {
@@ -22,7 +26,8 @@ export function ProfilePopover() {
   }, [profile, member]);
 
   if (!profile || !view || !member) return null;
-  const close = () => ui.setState({ profile: null });
+  const close = () => (setTimeoutMenu(false), ui.setState({ profile: null }));
+  const timedOutUntil = member.timeoutUntil && new Date(member.timeoutUntil).getTime() > Date.now() ? new Date(member.timeoutUntil) : null;
   const sid = view.session.id;
   const u = member.user;
   const isMe = u.id === meId;
@@ -46,6 +51,14 @@ export function ProfilePopover() {
             {view.presence.hostId === u.id && <Crown size={16} className="text-brand-2" aria-label="Host" />}
             <RoleBadge role={member.role} />
             {member.serverMuted && <span className="rounded bg-danger/15 px-1.5 py-0.5 text-[10px] font-bold text-danger">MUTED</span>}
+            {timedOutUntil && (
+              <span
+                className="flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-[10px] font-bold text-warn"
+                title={`Timed out until ${timedOutUntil.toLocaleString()}`}
+              >
+                <Clock size={10} /> TIMED OUT
+              </span>
+            )}
           </div>
           {member.nickname && <div className="text-sm text-muted">{u.displayName}</div>}
           <button
@@ -74,7 +87,10 @@ export function ProfilePopover() {
               {view.myRole === 'OWNER' && !isMe && (
                 <button
                   className="w-full rounded px-2 py-1.5 text-left hover:bg-hover"
-                  onClick={() => confirm(`Transfer ownership to ${u.displayName}? You will become a moderator.`) && act(() => zz.api.transferOwnership(sid, u.publicId), 'Ownership transferred')()}
+                  onClick={() =>
+                    confirm(`Transfer ownership to ${u.displayName}? You will become a moderator.`) &&
+                    act(() => zz.api.transferOwnership(sid, u.publicId), 'Ownership transferred')()
+                  }
                 >
                   Transfer ownership
                 </button>
@@ -87,8 +103,48 @@ export function ProfilePopover() {
                   {member.serverMuted ? 'Remove server mute' : 'Server mute (can’t talk in voice)'}
                 </button>
               )}
+              {mayModerate &&
+                can(view.myRole, 'session.timeout') &&
+                (timedOutUntil ? (
+                  <button
+                    className="w-full rounded px-2 py-1.5 text-left hover:bg-hover"
+                    onClick={act(() => zz.api.timeoutMember(sid, u.id, null), 'Timeout removed')}
+                  >
+                    Remove timeout{' '}
+                    <span className="text-xs text-muted">
+                      (until{' '}
+                      {timedOutUntil.toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                      )
+                    </span>
+                  </button>
+                ) : timeoutMenu ? (
+                  <div className="rounded bg-side p-1.5">
+                    <div className="px-1 pb-1 text-xs text-muted">Time out for… (can read, can’t write or react)</div>
+                    <div className="grid grid-cols-4 gap-1">
+                      {TIMEOUT_CHOICES.map(([label, minutes]) => (
+                        <button
+                          key={minutes}
+                          className="rounded bg-field px-1 py-1 text-xs hover:bg-line"
+                          onClick={act(() => zz.api.timeoutMember(sid, u.id, minutes), `Timed out for ${label}`)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <button className="w-full rounded px-2 py-1.5 text-left hover:bg-hover" onClick={() => setTimeoutMenu(true)}>
+                    Time out…
+                  </button>
+                ))}
               {mayModerate && can(view.myRole, 'session.kick') && (
-                <button className="w-full rounded px-2 py-1.5 text-left text-danger hover:bg-danger hover:text-white" onClick={act(() => zz.api.kick(sid, u.id), 'Kicked')}>
+                <button
+                  className="w-full rounded px-2 py-1.5 text-left text-danger hover:bg-danger hover:text-white"
+                  onClick={act(() => zz.api.kick(sid, u.id), 'Kicked')}
+                >
                   Kick from session
                 </button>
               )}
@@ -110,3 +166,10 @@ export function ProfilePopover() {
     </>
   );
 }
+
+const TIMEOUT_CHOICES: [string, number][] = [
+  ['10 min', 10],
+  ['1 hour', 60],
+  ['1 day', 1440],
+  ['1 week', 10080],
+];

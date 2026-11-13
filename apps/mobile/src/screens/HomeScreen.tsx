@@ -1,10 +1,10 @@
-import { sessionUnread } from '@zirzircord/client-core';
-import { formatSessionCode } from '@zirzircord/shared';
+import { sessionUnread, sleepLabel } from '@zirzircord/client-core';
+import { formatSessionCode, type SessionDTO, SET_SESSION_EXPIRY_NOTE, SLEEP } from '@zirzircord/shared';
 import { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Avatar, Btn, Sheet, ToggleRow } from '../components/ui';
-import { C, colorFor, initials, s } from '../theme';
+import { Avatar, Btn, SessionPicture, Sheet, ToggleRow } from '../components/ui';
+import { C, s } from '../theme';
 import { useApp, zz } from '../zz';
 import { UserSettingsSheet } from './UserSettingsSheet';
 
@@ -52,7 +52,7 @@ export function HomeScreen() {
             {inside.map((v) => (
               <SessionRow
                 key={v.session.id}
-                id={v.session.id}
+                session={v.session}
                 name={v.session.name}
                 sub={`${v.presence.present.length} online · ${formatSessionCode(v.session.code)}`}
                 action="Open"
@@ -67,20 +67,21 @@ export function HomeScreen() {
             {openSessions
               .filter((i) => !sessions[i.session.id])
               .map((i) => (
-                <SessionRow key={i.session.id} id={i.session.id} name={i.session.name} sub={`${i.presentCount} online`} action="Rejoin" onPress={() => zz.attempt(() => zz.openSession(i.session.id))} />
+                <SessionRow key={i.session.id} session={i.session} name={i.session.name} sub={`${i.presentCount} online`} action="Rejoin" onPress={() => zz.attempt(() => zz.openSession(i.session.id))} />
               ))}
           </Section>
         )}
         <Section title="Set sessions">
           {setSessions.length === 0 ? (
-            <Text style={s.muted}>Permanent sessions you've visited show up here. Open one any time — if nobody is there, you start hosting it.</Text>
+            <Text style={s.muted}>Set sessions you've visited show up here. Open one any time — if nobody is there, you start hosting it. One that nobody opens for {SLEEP.afterDays + SLEEP.deleteAfterDays} days is deleted with all its messages and files.</Text>
           ) : (
             setSessions.map((i) => (
               <SessionRow
                 key={i.session.id}
-                id={i.session.id}
+                session={i.session}
                 name={(i.session.ownerId === me.id ? '👑 ' : '') + i.session.name}
-                sub={i.live ? `● Live · ${i.presentCount} online` : 'Nobody here right now'}
+                sub={sleepLabel(i.session)?.text ?? (i.live ? `● Live · ${i.presentCount} online` : 'Nobody here right now')}
+                subColor={sleepLabel(i.session)?.urgent ? C.warn : undefined}
                 action={sessions[i.session.id] ? 'Open' : i.live ? 'Join' : 'Start hosting'}
                 onPress={() => zz.attempt(() => zz.openSession(i.session.id))}
               />
@@ -104,17 +105,33 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function SessionRow({ id, name, sub, action, badge, onPress }: { id: string; name: string; sub: string; action: string; badge?: number; onPress: () => void }) {
+function SessionRow({
+  session,
+  name,
+  sub,
+  subColor,
+  action,
+  badge,
+  onPress,
+}: {
+  session: SessionDTO;
+  name: string;
+  sub: string;
+  subColor?: string;
+  action: string;
+  badge?: number;
+  onPress: () => void;
+}) {
   return (
     <Pressable onPress={onPress} style={[s.card, s.row, { gap: 12 }]}>
-      <View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: colorFor(id), alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ color: 'white', fontWeight: '700' }}>{initials(name.replace('👑 ', ''))}</Text>
+      <View style={{ opacity: session.sleepingSince ? 0.6 : 1 }}>
+        <SessionPicture session={session} />
       </View>
       <View style={s.flex}>
         <Text style={[s.text, { fontWeight: '600' }]} numberOfLines={1}>
           {name}
         </Text>
-        <Text style={s.muted}>{sub}</Text>
+        <Text style={[s.muted, subColor ? { color: subColor, fontWeight: '600' } : null]}>{sub}</Text>
       </View>
       {!!badge && (
         <View style={{ backgroundColor: C.danger, borderRadius: 10, paddingHorizontal: 7, minWidth: 20, alignItems: 'center' }}>
@@ -134,7 +151,7 @@ function CreateSheet({ visible, onClose }: { visible: boolean; onClose: () => vo
   return (
     <Sheet visible={visible} title="Create a session" onClose={onClose}>
       <TextInput style={s.input} placeholder={`${me.displayName}'s session`} placeholderTextColor={C.faint} value={name} onChangeText={setName} maxLength={48} />
-      <ToggleRow title="Set session" desc={me.isGuest ? 'Create an account to make permanent sessions.' : 'Stays available after everyone leaves.'} value={isSet} onChange={setIsSet} disabled={me.isGuest} />
+      <ToggleRow title="Set session" desc={me.isGuest ? 'Create an account to make set sessions.' : `Stays available after everyone leaves. ${SET_SESSION_EXPIRY_NOTE}`} value={isSet} onChange={setIsSet} disabled={me.isGuest} />
       <Btn
         title="Create"
         busy={busy}

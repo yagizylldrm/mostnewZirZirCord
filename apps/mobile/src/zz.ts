@@ -21,7 +21,7 @@ export async function initClient(serverOverride?: string) {
   const server = serverOverride ?? (await storage.get(K_SERVER)) ?? defaultServer;
   if (serverOverride) await storage.set(K_SERVER, serverOverride);
   zz?.socket?.disconnect();
-  zz = new ZirZirClient({ apiUrl: server.replace(/\/$/, ''), storage });
+  zz = new ZirZirClient({ apiUrl: server.replace(/\/$/, ''), storage, client: `mobile/${Constants.expoConfig?.version ?? '0'}` });
   call = new CallManager(
     zz.api,
     { attachAudio: false, onError: (m) => zz.notify(m, 'error'), onInfo: (m) => zz.notify(m, 'success'), onSound: (e) => sounds.play(e) },

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../src/lib/db';
 import { headObject } from '../src/lib/storage';
-import { Client, sleep, startServer } from './helpers';
+import { Client, resetSpam, sleep, startServer } from './helpers';
 
 let app: FastifyInstance;
 let base: string;
@@ -190,7 +190,10 @@ describe('message speed paths', () => {
     const { s, text } = await sessionWith(u);
     const first = await u.req('POST', `/channels/${text.id}/messages`, { content: 'm1', nonce: 'abc123' });
     expect(first.body.message.nonce).toBe('abc123');
-    for (let i = 2; i <= 12; i++) await u.req('POST', `/channels/${text.id}/messages`, { content: `m${i}` });
+    for (let i = 2; i <= 12; i++) {
+      await u.req('POST', `/channels/${text.id}/messages`, { content: `m${i}` });
+      await resetSpam(u.userId); // this test is about paging, not the per-user speed limit
+    }
     const pages: string[] = [];
     let before = '';
     for (let k = 0; k < 3; k++) {

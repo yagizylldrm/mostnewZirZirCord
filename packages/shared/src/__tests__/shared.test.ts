@@ -76,3 +76,14 @@ describe('mentions', () => {
     expect(canMentionEveryone('MOD', { membersCanMentionEveryone: false })).toBe(true);
   });
 });
+
+describe('reaction emoji', async () => {
+  const { reactionEmojiSchema } = await import('..');
+  const ok = (e: string) => reactionEmojiSchema.safeParse(e).success;
+  it('accepts emoji, skin tones, ZWJ sequences, flags and keycaps', () => {
+    for (const e of ['👍', '👍🏽', '❤️', '👨‍👩‍👧', '🇹🇷', '1️⃣', '🏳️‍🌈', '🏴󠁧󠁢󠁳󠁣󠁴󠁿']) expect(ok(e), e).toBe(true);
+  });
+  it('rejects text', () => {
+    for (const e of ['a', 'lol', '1', '#', '', 'x👍', '<script>']) expect(ok(e), e).toBe(false);
+  });
+});

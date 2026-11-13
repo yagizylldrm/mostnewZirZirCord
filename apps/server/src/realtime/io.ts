@@ -1,5 +1,6 @@
 import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
+import { checkClient, corsOriginAllowed, enforceClientCheck, isAllowedOrigin, normalizeOrigin } from '../lib/client-check';
 import { HttpError } from '../lib/errors';
 import { assertUserActive, verifyAccessToken } from '../auth/tokens';
 import { prisma } from '../lib/db';
@@ -17,9 +18,16 @@ const ENTER_MAX = 10;
 const ENTER_WINDOW_MS = 10_000;
 const TYPING_INTERVAL_MS = 2_000;
 
-export function createRealtime(httpServer: HttpServer, originAllowed: (origin: string | undefined) => boolean) {
+export function createRealtime(httpServer: HttpServer) {
   const io: IO = new Server(httpServer, {
-    cors: { origin: (origin, cb) => cb(null, originAllowed(origin)), credentials: true },
+    cors: { origin: (origin, cb) => cb(null, corsOriginAllowed(origin)), credentials: true },
+    // WebSocket upgrades aren't covered by CORS: refuse other websites outright.
+    allowRequest: (req, cb) => {
+      const origin = normalizeOrigin(req.headers.origin);
+      const bad = !!origin && origin !== 'null' && !isAllowedOrigin(origin);
+      if (bad && !enforceClientCheck()) console.warn(`[socket] foreign origin ${origin} (log only)`);
+      cb(bad && enforceClientCheck() ? 'bad_origin' : null, !(bad && enforceClientCheck()));
+    },
     pingInterval: 10_000,
     pingTimeout: 15_000,
     maxHttpBufferSize: 64 * 1024,
@@ -28,6 +36,11 @@ export function createRealtime(httpServer: HttpServer, originAllowed: (origin: s
 
   io.use(async (socket, next) => {
     try {
+      const verdict = checkClient(socket.handshake.headers.origin, socket.handshake.auth?.client);
+      if (!verdict.ok) {
+        if (enforceClientCheck()) return next(new Error(verdict.code));
+        console.warn(`[socket] client check failed: ${verdict.code} (log only)`);
+      }
       const token = socket.handshake.auth?.token;
       if (typeof token !== 'string') throw new Error('missing token');
       const ctx = await verifyAccessToken(token);
