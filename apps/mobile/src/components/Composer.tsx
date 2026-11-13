@@ -1,4 +1,4 @@
-import { LIMITS, canMentionEveryone, mentionToken } from '@zirzircord/shared';
+import { type FormatSpan, LIMITS, canMentionEveryone, formatSpans, mentionToken } from '@zirzircord/shared';
 import { listedMembers, memberName, type OutgoingFile } from '@zirzircord/client-core';
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import * as DocumentPicker from 'expo-document-picker';
@@ -14,8 +14,25 @@ async function uriToBlob(uri: string): Promise<Blob> {
   return (await fetch(uri)).blob();
 }
 
+const MONO = Platform.select({ ios: 'Menlo', default: 'monospace' });
+
+/** How a run of typed text looks in the message box (the sent message is drawn by FormattedText). */
+function spanStyle(sp: FormatSpan) {
+  const lines = [sp.underline && 'underline', sp.strike && 'line-through'].filter(Boolean).join(' ');
+  return {
+    color: sp.marker ? C.faint : sp.link ? '#38bdf8' : sp.quote ? C.muted : C.fg,
+    ...(sp.bold && { fontWeight: '700' as const }),
+    ...(sp.italic && { fontStyle: 'italic' as const }),
+    ...(lines && { textDecorationLine: lines as 'underline' | 'line-through' | 'underline line-through' }),
+    ...(sp.code && { fontFamily: MONO, backgroundColor: C.rail }),
+    ...(sp.spoiler && { backgroundColor: C.line }),
+  };
+}
+
 export function Composer({ sessionId, channelId, channelName }: { sessionId: string; channelId: string; channelName: string }) {
   const [text, setText] = useState('');
+  // The typed text, styled as you type (markers stay visible but dimmed). The runs join back to exactly `text`.
+  const spans = useMemo(() => formatSpans(text), [text]);
   const [busy, setBusy] = useState(false);
   const uploads = useApp((st) => st.uploads);
   const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
@@ -191,12 +208,17 @@ export function Composer({ sessionId, channelId, channelName }: { sessionId: str
             style={{ flex: 1, color: C.fg, fontSize: 15, paddingVertical: 10, paddingHorizontal: 6, maxHeight: 120 }}
             placeholder={`Message #${channelName}`}
             placeholderTextColor={C.faint}
-            value={text}
             onChangeText={(t) => (setText(t), zz.sendTyping(channelId))}
             onFocus={() => setPanel(null)}
             multiline
             maxLength={LIMITS.message}
-          />
+          >
+            {spans.map((sp, i) => (
+              <Text key={i} style={spanStyle(sp)}>
+                {sp.text}
+              </Text>
+            ))}
+          </TextInput>
           <Pressable onPress={() => setPanel(panel === 'stickers' ? null : 'stickers')} hitSlop={6} accessibilityLabel="Stickers" style={{ padding: 4 }}>
             <Text style={{ fontSize: 19, opacity: panel === 'stickers' ? 1 : 0.7 }}>🏷️</Text>
           </Pressable>

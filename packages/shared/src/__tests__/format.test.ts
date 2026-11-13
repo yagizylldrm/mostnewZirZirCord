@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type FormatNode, formatPlainText, parseFormat } from '..';
+import { type FormatNode, formatPlainText, formatSpans, parseFormat } from '..';
 
 const t = (text: string): FormatNode => ({ type: 'text', text });
 
@@ -121,5 +121,89 @@ describe('formatPlainText', () => {
     expect(formatPlainText('**bold** and *it* and `code` and ||secret||')).toBe('bold and it and code and [spoiler]');
     expect(formatPlainText('> quoted\n```\nblock\n```')).toBe('quoted\nblock');
     expect(formatPlainText('see https://a.com/x_y')).toBe('see https://a.com/x_y');
+  });
+});
+
+describe('formatSpans (styled text for the message box)', () => {
+  const joined = (text: string) => formatSpans(text).map((x) => x.text).join('');
+
+  it('always gives back exactly the typed text, so an editor can show it styled', () => {
+    const samples = [
+      '', 'plain', '**bold**', '*it* and _it_', '__u__ ~~s~~ ||x||', '`code` and ```block```',
+      '> quote\n> more\nplain', 'a\n```js\nlet a;\n```\nb', '\\*escaped\\* \\\\ done', '**a *b* c**', '***both***',
+      'https://example.com/a_b_c/*x* end', 'snake_case 5*3 = 15', '**unclosed', '||', '``', '````', '> ', '>\n', '\n\n',
+      'a\n\n> q\n\nb', '```\n```', '```x```\n', '\n```a```',
+    ];
+    for (const sample of samples) expect(joined(sample)).toBe(sample);
+  });
+
+  it('keeps the typed text for random input too', () => {
+    // Small deterministic generator so a failure is reproducible.
+    let seed = 12345;
+    const next = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    const alphabet = ['a', 'b', ' ', '*', '_', '~', '|', '`', '\\', '>', '\n', 'h', 't', 'p', ':', '/', '1', 'ç'];
+    for (let n = 0; n < 400; n++) {
+      let text = '';
+      const len = Math.floor(next() * 40);
+      for (let i = 0; i < len; i++) text += alphabet[Math.floor(next() * alphabet.length)];
+      expect(joined(text), JSON.stringify(text)).toBe(text);
+    }
+  });
+
+  it('marks the markers and styles what is between them', () => {
+    expect(formatSpans('**a**')).toEqual([
+      { text: '**', marker: true, bold: true },
+      { text: 'a', bold: true },
+      { text: '**', marker: true, bold: true },
+    ]);
+    expect(formatSpans('x *it* y')).toEqual([
+      { text: 'x ' },
+      { text: '*', marker: true, italic: true },
+      { text: 'it', italic: true },
+      { text: '*', marker: true, italic: true },
+      { text: ' y' },
+    ]);
+  });
+
+  it('nests styles', () => {
+    const spans = formatSpans('**a *b* c**');
+    expect(spans.find((x) => x.text === 'b')).toEqual({ text: 'b', bold: true, italic: true });
+    expect(spans.find((x) => x.text === 'a ')).toEqual({ text: 'a ', bold: true });
+  });
+
+  it('leaves unclosed markers unstyled, like the sent message', () => {
+    expect(formatSpans('**oops')).toEqual([{ text: '**oops' }]);
+    expect(formatSpans('2 * 3 * 4')).toEqual([{ text: '2 * 3 * 4' }]);
+  });
+
+  it('styles code, links and spoilers', () => {
+    expect(formatSpans('`x`')).toEqual([
+      { text: '`', marker: true, code: true },
+      { text: 'x', code: true },
+      { text: '`', marker: true, code: true },
+    ]);
+    expect(formatSpans('see https://a.com/x_y')).toEqual([{ text: 'see ' }, { text: 'https://a.com/x_y', link: true }]);
+    expect(formatSpans('||s||').map((x) => x.spoiler)).toEqual([true, true, true]);
+  });
+
+  it('shows the quote marker on every quoted line', () => {
+    expect(formatSpans('> a\n> b')).toEqual([
+      { text: '> ', marker: true, quote: true },
+      { text: 'a\n', quote: true },
+      { text: '> ', marker: true, quote: true },
+      { text: 'b', quote: true },
+    ]);
+  });
+
+  it('shows code block fences as markers and the code as code', () => {
+    expect(formatSpans('```js\nlet a;\n```')).toEqual([
+      { text: '```js\n', marker: true, code: true },
+      { text: 'let a;', code: true },
+      { text: '\n```', marker: true, code: true },
+    ]);
+  });
+
+  it('does not change what parseFormat returns', () => {
+    expect(parseFormat('a\n> q\nb')).toEqual([t('a'), { type: 'quote', children: [t('q')] }, t('b')]);
   });
 });
