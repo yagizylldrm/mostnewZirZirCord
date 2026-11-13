@@ -33,7 +33,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const hostName = view.presence.hostId ? memberName(view, view.presence.hostId) : '—';
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.main }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.main }} behavior="padding">
       <View style={{ paddingTop: insets.top, backgroundColor: C.side }}>
         <View style={[s.row, { paddingHorizontal: 12, paddingVertical: 8, gap: 10 }]}>
           <Pressable onPress={() => zz.setActiveSession(null)} hitSlop={12}>
