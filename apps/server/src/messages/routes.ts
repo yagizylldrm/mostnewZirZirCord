@@ -5,6 +5,7 @@ import { LIMITS, can, canMentionEveryone, editMessageSchema, neutralizeEveryone,
 import { prisma } from '../lib/db';
 import { badRequest, forbidden, notFound } from '../lib/errors';
 import { toMessageDTO } from '../lib/serializers';
+import { limitPerUser } from '../lib/userLimit';
 import { randomUUID } from 'node:crypto';
 import { copyObject, deleteKeys, getObjectBuffer, headObject, putObject } from '../lib/storage';
 import { requireChannelAccess } from '../sessions/access';
@@ -13,6 +14,9 @@ import { rooms } from '../sessions/hub';
 const cid = z.object({ id: z.string().uuid() });
 const include = { attachments: true } as const;
 const THUMBNAIL_MAX_BYTES = 25 * 1024 * 1024;
+/** Messages one account may send per window (a burst of 20 is fine, a sustained flood is not). */
+const MESSAGES_PER_WINDOW = 20;
+const MESSAGE_WINDOW_MS = 10_000;
 
 /**
  * Resolves mention tokens: keeps only real session members, and honours
@@ -97,7 +101,9 @@ export async function messageRoutes(app: FastifyInstance) {
     return { messages: await Promise.all(rows.reverse().map(toMessageDTO)), hasMore: rows.length === q.limit };
   });
 
-  app.post('/channels/:id/messages', { ...auth, config: { rateLimit: { max: 30, timeWindow: '10 seconds' } } }, async (req) => {
+  // Per IP as a coarse flood cap (generous, many people share one IP); the real limit is per account.
+  app.post('/channels/:id/messages', { ...auth, config: { rateLimit: { max: 100, timeWindow: '10 seconds' } } }, async (req) => {
+    await limitPerUser(req.auth.userId, 'msg', MESSAGES_PER_WINDOW, MESSAGE_WINDOW_MS);
     const { id } = cid.parse(req.params);
     const body = sendMessageSchema.parse(req.body);
     const { channel, session, member } = await requireChannelAccess(id, req.auth.userId);
