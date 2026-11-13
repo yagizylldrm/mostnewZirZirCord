@@ -1,6 +1,6 @@
 import { AudioSession, VideoView } from '@livekit/react-native';
 import { isChannelMuted, isSessionMuted, listedMembers, memberName, sessionUnread } from '@zirzircord/client-core';
-import { can, canCreateChannel, canModerate, formatSessionCode, isJumboEmoji, splitMentions, type MessageDTO } from '@zirzircord/shared';
+import { can, canCreateChannel, canModerate, formatSessionCode, isJumboEmoji, type MessageDTO } from '@zirzircord/shared';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useMemo, useState } from 'react';
 import { AppState as RNAppState } from 'react-native';
@@ -8,6 +8,7 @@ import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView,
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttachmentView } from '../components/Attachments';
 import { Composer } from '../components/Composer';
+import { FormattedText } from '../components/FormattedText';
 import { Avatar, Banner, Btn, RoleBadge, RoundBtn, Sheet } from '../components/ui';
 import { C, s } from '../theme';
 import { call, useApp, useCall, zz } from '../zz';
@@ -221,18 +222,7 @@ function Messages({ sessionId, channelId }: { sessionId: string; channelId: stri
                   isJumboEmoji(m.content) ? (
                     <Text style={{ fontSize: 44, lineHeight: 54 }}>{m.content}</Text>
                   ) : (
-                    <Text style={[s.text, { lineHeight: 21 }]} selectable>
-                      {splitMentions(m.content).map((part, i) =>
-                        part.type === 'text' ? (
-                          part.text
-                        ) : (
-                          <Text key={i} style={{ color: C.brand, fontWeight: '700', backgroundColor: C.brand + '26' }}>
-                            @{part.type === 'everyone' ? 'everyone' : memberName(view, part.userId)}
-                          </Text>
-                        ),
-                      )}
-                      {m.editedAt ? <Text style={{ color: C.faint, fontSize: 10 }}> (edited)</Text> : null}
-                    </Text>
+                    <FormattedText text={m.content} view={view} trailing={m.editedAt ? <Text style={{ color: C.faint, fontSize: 10 }}> (edited)</Text> : undefined} />
                   )
                 ) : null}
                 {m.attachments.map((a) => (
