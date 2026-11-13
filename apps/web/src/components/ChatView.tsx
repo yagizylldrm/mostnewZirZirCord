@@ -1,4 +1,4 @@
-import { can, isJumboEmoji, splitMentions } from '@zirzircord/shared';
+import { can, formatPlainText, isJumboEmoji } from '@zirzircord/shared';
 import { type LocalMessage, memberName, mentionsToText } from '@zirzircord/client-core';
 import type { MessageDTO } from '@zirzircord/shared';
 import { Hash, Pencil, Reply, Trash2, Users } from 'lucide-react';
@@ -7,48 +7,8 @@ import { formatDay, formatTime } from '../lib/format';
 import { ui, useApp, zz } from '../lib/zz';
 import { AttachmentView } from './Attachments';
 import { Composer } from './Composer';
+import { FormattedText } from './FormattedText';
 import { Avatar, IconButton, cx } from './ui';
-
-const URL_RE = /(https?:\/\/[^\s<]+[^\s<.,:;"')\]!?])/g;
-
-function Linkified({ text }: { text: string }) {
-  const parts = text.split(URL_RE);
-  return (
-    <>
-      {parts.map((p, i) =>
-        i % 2 === 1 ? (
-          <a key={i} href={p} target="_blank" rel="noreferrer noopener" className="text-sky-400 hover:underline">
-            {p}
-          </a>
-        ) : (
-          <Fragment key={i}>{p}</Fragment>
-        ),
-      )}
-    </>
-  );
-}
-
-/** Message text with links, @mention pills and @everyone. */
-function RichText({ text, sessionId }: { text: string; sessionId: string }) {
-  const view = useApp((s) => s.sessions[sessionId]);
-  return (
-    <>
-      {splitMentions(text).map((part, i) =>
-        part.type === 'text' ? (
-          <Linkified key={i} text={part.text} />
-        ) : (
-          <button
-            key={i}
-            className="rounded bg-brand/20 px-1 font-medium text-brand hover:bg-brand/30"
-            onClick={(e) => part.type === 'user' && ui.setState({ profile: { userId: part.userId, sessionId, x: e.clientX, y: e.clientY } })}
-          >
-            @{part.type === 'everyone' ? 'everyone' : memberName(view, part.userId)}
-          </button>
-        ),
-      )}
-    </>
-  );
-}
 
 /** For editing: tokens → "@Name"; on save, names of mentioned members → tokens again. */
 function tokensToNames(content: string, view: Parameters<typeof memberName>[0]) {
@@ -241,7 +201,7 @@ function MessageRow(p: {
           <div className="mb-0.5 flex items-center gap-1.5 truncate text-xs text-muted">
             <Reply size={12} className="shrink-0 -scale-x-100" />
             <span className="font-semibold">{p.replyTo ? memberName(view, p.replyTo.authorId) : 'Unknown'}</span>
-            <span className="truncate">{p.replyTo ? p.replyTo.content || '📎 Attachment' : 'Original message not loaded'}</span>
+            <span className="truncate">{p.replyTo ? formatPlainText(p.replyTo.content) || '📎 Attachment' : 'Original message not loaded'}</span>
           </div>
         )}
         {!p.grouped && (
@@ -273,7 +233,7 @@ function MessageRow(p: {
               {isJumboEmoji(p.m.content) ? (
                 <span className="text-5xl leading-tight">{p.m.content}</span>
               ) : (
-                <RichText text={p.m.content} sessionId={p.sessionId} />
+                <FormattedText text={p.m.content} sessionId={p.sessionId} />
               )}
               {p.m.editedAt && <span className="ml-1 text-[10px] text-faint">(edited)</span>}
             </div>

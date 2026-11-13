@@ -9,6 +9,7 @@ import type {
   SessionSnapshot,
   UpdateProfileInput,
 } from '@zirzircord/shared';
+import { formatPlainText } from '@zirzircord/shared';
 import { ApiClient, ApiError, putWithProgress } from './api';
 import type { PlatformConfig } from './platform';
 import { randomId } from './platform';
@@ -556,7 +557,7 @@ export class ZirZirClient {
     this.onSound(isMention ? 'mention' : 'message');
     const author = m.authorId ? view.members[m.authorId] : undefined;
     const text = m.content
-      ? mentionsToText(m.content, view)
+      ? formatPlainText(mentionsToText(m.content, view))
       : m.attachments[0]?.kind === 'STICKER'
         ? 'sent a sticker'
         : m.attachments[0]?.kind === 'VOICE_MESSAGE'
