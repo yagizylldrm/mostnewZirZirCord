@@ -1,9 +1,9 @@
-import { type FormatSpan, LIMITS, canMentionEveryone, formatSpans, mentionToken } from '@zirzircord/shared';
+import { type FormatSpan, LIMITS, type MessageDTO, canMentionEveryone, formatSpans, mentionToken } from '@zirzircord/shared';
 import { listedMembers, memberName, type OutgoingFile } from '@zirzircord/client-core';
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ComponentRef, useEffect, useMemo, useRef, useState } from 'react';
 import { ActionSheetIOS, Alert, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { C, formatDuration, s } from '../theme';
 import { EmojiPanel, StickerPanel } from './Pickers';
@@ -29,7 +29,19 @@ function spanStyle(sp: FormatSpan) {
   };
 }
 
-export function Composer({ sessionId, channelId, channelName }: { sessionId: string; channelId: string; channelName: string }) {
+export function Composer({
+  sessionId,
+  channelId,
+  channelName,
+  replyTo,
+  onClearReply,
+}: {
+  sessionId: string;
+  channelId: string;
+  channelName: string;
+  replyTo?: MessageDTO | null;
+  onClearReply?: () => void;
+}) {
   const [text, setText] = useState('');
   // The typed text, styled as you type (markers stay visible but dimmed). The runs join back to exactly `text`.
   const spans = useMemo(() => formatSpans(text), [text]);
@@ -43,6 +55,11 @@ export function Composer({ sessionId, channelId, channelName }: { sessionId: str
   const { view, meId } = useApp((st) => ({ view: st.sessions[sessionId], meId: st.me!.id }));
   // @mention autocomplete ("@Name" → <@id> on send)
   const mentionMap = useRef(new Map<string, string>());
+  const inputRef = useRef<ComponentRef<typeof TextInput>>(null);
+  // Choosing "Reply" on a message puts the cursor in the box.
+  useEffect(() => {
+    if (replyTo) inputRef.current?.focus();
+  }, [replyTo]);
   const query = /(^|\s)@([^\s@]{0,32})$/.exec(text)?.[2];
   const suggestions = useMemo(() => {
     if (query === undefined || !view) return [];
@@ -80,7 +97,9 @@ export function Composer({ sessionId, channelId, channelName }: { sessionId: str
     setBusy(true);
     setText('');
     // Shows instantly; if it fails, the message gets Retry / Delete in the chat.
-    await zz.sendMessage(sessionId, channelId, content, files);
+    const reply = replyTo?.id;
+    onClearReply?.();
+    await zz.sendMessage(sessionId, channelId, content, files, reply);
     setBusy(false);
   };
 
@@ -200,11 +219,23 @@ export function Composer({ sessionId, channelId, channelName }: { sessionId: str
           </Pressable>
         </View>
       ) : (
+        <View>
+          {replyTo && (
+            <View style={[s.row, { backgroundColor: C.side, borderTopLeftRadius: 14, borderTopRightRadius: 14, paddingHorizontal: 12, paddingVertical: 6, gap: 8, marginBottom: -6, paddingBottom: 12 }]}>
+              <Text style={{ color: C.muted, fontSize: 13, flex: 1 }} numberOfLines={1}>
+                Replying to <Text style={{ color: C.fg, fontWeight: '700' }}>{memberName(view, replyTo.authorId)}</Text>
+              </Text>
+              <Pressable onPress={onClearReply} hitSlop={10} accessibilityLabel="Cancel reply">
+                <Text style={{ color: C.muted, fontSize: 16 }}>✕</Text>
+              </Pressable>
+            </View>
+          )}
         <View style={[s.row, { backgroundColor: C.field, borderRadius: 22, paddingLeft: 6, paddingRight: 6, gap: 4 }]}>
           <Pressable onPress={attach} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: C.line, alignItems: 'center', justifyContent: 'center' }}>
             <Text style={{ color: C.fg, fontSize: 20, lineHeight: 22 }}>＋</Text>
           </Pressable>
           <TextInput
+            ref={inputRef}
             style={{ flex: 1, color: C.fg, fontSize: 15, paddingVertical: 10, paddingHorizontal: 6, maxHeight: 120 }}
             placeholder={`Message #${channelName}`}
             placeholderTextColor={C.faint}
@@ -234,6 +265,7 @@ export function Composer({ sessionId, channelId, channelName }: { sessionId: str
               <Text style={{ fontSize: 20 }}>🎙️</Text>
             </Pressable>
           )}
+        </View>
         </View>
       )}
       {panel === 'emoji' && <EmojiPanel onPick={(e) => setText((t) => t + e)} />}

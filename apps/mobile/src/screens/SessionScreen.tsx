@@ -1,8 +1,8 @@
 import { AudioSession, VideoView } from '@livekit/react-native';
-import { type CallParticipant, type LocalMessage, isChannelMuted, isSessionMuted, listedMembers, memberName, sessionUnread } from '@zirzircord/client-core';
-import { QUICK_REACTIONS, can, canCreateChannel, canModerate, formatSessionCode, isJumboEmoji, splitMentions, type MessageDTO } from '@zirzircord/shared';
+import { type CallParticipant, type LocalMessage, isChannelMuted, isSessionMuted, listedMembers, memberName, mentionsToText, sessionUnread } from '@zirzircord/client-core';
+import { QUICK_REACTIONS, can, canCreateChannel, canModerate, formatPlainText, formatSessionCode, isJumboEmoji, splitMentions, type MessageDTO } from '@zirzircord/shared';
 import * as Clipboard from 'expo-clipboard';
-import { useEffect, useMemo, useState } from 'react';
+import { type ComponentRef, useEffect, useMemo, useState, useRef } from 'react';
 import { AppState as RNAppState } from 'react-native';
 import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -120,6 +120,9 @@ function ChatTab({ sessionId }: { sessionId: string }) {
   const textChannels = view?.channels.filter((c) => c.type === 'TEXT') ?? [];
   const channel = textChannels.find((c) => c.id === active) ?? textChannels[0];
   const [newChannel, setNewChannel] = useState(false);
+  // The message being replied to; belongs to one channel, so switching channels drops it.
+  const [replyTo, setReplyTo] = useState<MessageDTO | null>(null);
+  useEffect(() => setReplyTo(null), [channel?.id]);
 
   return (
     <View style={s.flex}>
@@ -151,10 +154,10 @@ function ChatTab({ sessionId }: { sessionId: string }) {
           </Pressable>
         )}
       </ScrollView>
-      {channel ? <Messages key={channel.id} sessionId={sessionId} channelId={channel.id} /> : <Text style={[s.muted, { padding: 20 }]}>No text channels.</Text>}
+      {channel ? <Messages key={channel.id} sessionId={sessionId} channelId={channel.id} onReply={setReplyTo} /> : <Text style={[s.muted, { padding: 20 }]}>No text channels.</Text>}
       {channel && (
         <TimeoutGate sessionId={sessionId}>
-          <Composer sessionId={sessionId} channelId={channel.id} channelName={channel.name} />
+          <Composer sessionId={sessionId} channelId={channel.id} channelName={channel.name} replyTo={replyTo} onClearReply={() => setReplyTo(null)} />
         </TimeoutGate>
       )}
       <NewChannelSheet sessionId={sessionId} type="TEXT" visible={newChannel} onClose={() => setNewChannel(false)} />
@@ -162,7 +165,7 @@ function ChatTab({ sessionId }: { sessionId: string }) {
   );
 }
 
-function Messages({ sessionId, channelId }: { sessionId: string; channelId: string }) {
+function Messages({ sessionId, channelId, onReply }: { sessionId: string; channelId: string; onReply: (m: MessageDTO) => void }) {
   const { cm, view, meId, typing } = useApp((st) => ({ cm: st.messages[channelId], view: st.sessions[sessionId], meId: st.me!.id, typing: st.typing[channelId] }));
   useEffect(() => {
     zz.loadMessages(channelId).catch((e) => zz.notify(e.message, 'error'));
@@ -182,14 +185,17 @@ function Messages({ sessionId, channelId }: { sessionId: string; channelId: stri
     .map(([u]) => memberName(view, u));
 
   const [actions, setActions] = useState<MessageDTO | null>(null);
+  const listRef = useRef<ComponentRef<typeof FlatList<LocalMessage>>>(null);
   const timedOut = isTimedOut(view?.members[meId]?.timeoutUntil);
   const onLongPress = (m: MessageDTO) => setActions(m);
 
   return (
     <View style={s.flex}>
       <FlatList
+        ref={listRef}
         inverted
         data={data}
+        onScrollToIndexFailed={() => {}}
         keyExtractor={(m) => m.id}
         onEndReached={() => zz.loadOlder(channelId).catch(() => {})}
         onEndReachedThreshold={0.4}
@@ -215,6 +221,16 @@ function Messages({ sessionId, channelId }: { sessionId: string; channelId: stri
                     <Text style={{ color, fontWeight: '700' }}>{memberName(view, m.authorId)}</Text>
                     <Text style={{ color: C.faint, fontSize: 11 }}>{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
                   </View>
+                )}
+                {!!m.replyToId && (
+                  <ReplyQuote
+                    original={data.find((x) => x.id === m.replyToId)}
+                    view={view}
+                    onPress={() => {
+                      const index = data.findIndex((x) => x.id === m.replyToId);
+                      if (index >= 0) listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+                    }}
+                  />
                 )}
                 {m.content ? (
                   isJumboEmoji(m.content) ? (
@@ -268,6 +284,7 @@ function Messages({ sessionId, channelId }: { sessionId: string; channelId: stri
                 ))}
               </View>
             )}
+            {!timedOut && <Btn variant="secondary" title="Reply" onPress={() => (setActions(null), onReply(actions))} />}
             {!!actions.content && <Btn variant="secondary" title="Copy text" onPress={async () => (setActions(null), await Clipboard.setStringAsync(actions.content), zz.notify('Copied', 'success'))} />}
             {(actions.authorId === meId || can(view?.myRole, 'message.deleteAny')) && (
               <Btn
@@ -284,6 +301,21 @@ function Messages({ sessionId, channelId }: { sessionId: string; channelId: stri
         )}
       </Sheet>
     </View>
+  );
+}
+
+
+/** The "↩ Name  text" line above a reply; tapping it jumps to the original when it is loaded. */
+function ReplyQuote({ original, view, onPress }: { original?: MessageDTO; view: Parameters<typeof memberName>[0]; onPress: () => void }) {
+  const preview = original ? formatPlainText(mentionsToText(original.content, view)).replace(/\s+/g, ' ') || '📎 Attachment' : 'Original message not loaded';
+  return (
+    <Pressable onPress={onPress} disabled={!original} style={[s.row, { gap: 6, borderLeftWidth: 2, borderLeftColor: C.line, paddingLeft: 8 }]}>
+      <Text style={{ color: C.muted, fontSize: 12, flexShrink: 1 }} numberOfLines={1}>
+        <Text style={{ fontWeight: '700' }}>{'↳ '}{original ? memberName(view, original.authorId) : 'Unknown'}</Text>
+        {'  '}
+        {preview}
+      </Text>
+    </Pressable>
   );
 }
 
