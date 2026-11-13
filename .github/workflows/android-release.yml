@@ -42,7 +42,10 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: android-actions/setup-android@v3
+      # The runner image already ships the Android SDK; Gradle fetches any missing platform itself
+      # once the licenses are accepted (android-actions/setup-android fails on the current image).
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - name: Release key
         env:
