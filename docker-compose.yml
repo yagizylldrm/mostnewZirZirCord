@@ -1,7 +1,8 @@
 # Local development infrastructure for ZirZirCord.
 # Start with: npm run infra:up
 # Databases and storage listen on 127.0.0.1 only, so nobody on the same Wi-Fi can reach
-# them (they use default passwords). LiveKit media ports stay open for phones on the LAN.
+# them (they use default passwords). LiveKit media ports stay open for phones on the LAN;
+# set STORAGE_BIND / LIVEKIT_BIND to 0.0.0.0 in .env while testing on a phone.
 name: zirzircord
 services:
   postgres:
@@ -35,7 +36,7 @@ services:
     image: livekit/livekit-server:latest
     command: --config /etc/livekit.yaml --node-ip ${LIVEKIT_NODE_IP:-127.0.0.1}
     ports:
-      - "127.0.0.1:7880:7880"        # signalling (WebSocket)
+      - "${LIVEKIT_BIND:-127.0.0.1}:7880:7880"   # signalling (WebSocket); LIVEKIT_BIND=0.0.0.0 for phones on the LAN
       - "7881:7881"        # WebRTC over TCP (fallback)
       - "7882:7882/udp"    # WebRTC over UDP (single muxed port)
     volumes:

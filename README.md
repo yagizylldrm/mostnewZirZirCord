@@ -65,7 +65,7 @@ npm test -w @zirzircord/server     # session lifecycle, host handover, set sessi
 
 `localhost` on a phone is the phone itself, so:
 
-1. Set `LIVEKIT_NODE_IP=<your Mac's LAN IP>` and `STORAGE_BIND=0.0.0.0` in `.env`, then `docker compose up -d livekit storage`. (Storage only listens on localhost by default; remove `STORAGE_BIND` again when you are done.)
+1. Set `LIVEKIT_NODE_IP=<your Mac's LAN IP>` `STORAGE_BIND=0.0.0.0` and `LIVEKIT_BIND=0.0.0.0` in `.env`, then `docker compose up -d livekit storage`. (Both only listen on localhost by default; remove these again when you are done.)
 2. Set `LIVEKIT_URL=ws://<LAN IP>:7880`, `S3_PUBLIC_ENDPOINT=http://<LAN IP>:9000`, `PUBLIC_API_URL=http://<LAN IP>:4000`, and add `http://<LAN IP>:5173` to `CORS_ORIGINS`.
 3. Web: open `http://<LAN IP>:5173`. Browsers only allow the microphone over HTTPS or localhost, so for real phone tests use the mobile app or deploy with HTTPS.
 4. Mobile app: on the sign-in screen, tap **Server** and enter `http://<LAN IP>:4000`. Android only allows plain `http://` in builds made with `EXPO_PUBLIC_ALLOW_HTTP=1` (or `EXPO_PUBLIC_API_URL=http://…`); release builds are HTTPS-only.
