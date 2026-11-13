@@ -219,3 +219,12 @@ The older Electron shell in `apps/desktop` is kept for now.
 - **Releases:** push a tag `desktop-v<version>` (matching `apps/desktop-tauri/src-tauri/tauri.conf.json`). `.github/workflows/desktop-release.yml` builds `.dmg` (Apple Silicon + Intel), Windows `.exe`, Linux `.AppImage`/`.deb` and attaches them to a draft GitHub Release; publish the draft to ship it. Installed apps check the latest release for updates on startup.
 - **One-time repo setup:** secret `TAURI_SIGNING_PRIVATE_KEY` (content of `~/.tauri/zirzircord.key`, the updater signing key — keep it safe, losing it breaks updates), optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and variable `VITE_API_URL`.
 - Builds are not code-signed: on macOS right-click → Open the first time; on Windows SmartScreen → More info → Run anyway. Voice calls on Linux (WebKitGTK) are experimental, and screen sharing is not available in this shell yet.
+
+## Android app
+
+The mobile app (`apps/mobile`, Expo) also runs on Android; it is not on the Play Store, so it is shared as an APK.
+
+- **Try it on an emulator:** install the Android SDK command-line tools and JDK 17, create a Pixel AVD with an `arm64-v8a` image, then `cd apps/mobile && EXPO_PUBLIC_API_URL=http://10.0.2.2:4000 npx expo run:android` (the emulator reaches your Mac at `10.0.2.2`). The local API must run with `CLIENT_CHECK=log` there, because the emulator's address differs from `PUBLIC_API_URL`.
+- **Release:** push a tag `mobile-v<version>`. `.github/workflows/android-release.yml` builds a signed APK and attaches it to a draft GitHub Release. `ANDROID_VERSION_CODE` is the workflow run number (every update needs a higher one).
+- **One-time setup:** create the release key with `keytool -genkeypair -v -keystore zirzircord-release.jks -alias zirzircord -keyalg RSA -keysize 2048 -validity 10000`, then add the secrets `ANDROID_KEYSTORE_BASE64` (`base64 -i zirzircord-release.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` and the variable `VITE_API_URL`. **Keep the keystore and passwords somewhere safe:** an installed app can only be updated by an APK signed with the same key.
+- Release builds are not minified (R8 breaks on LiveKit's WebRTC classes), which makes the APK larger. Voice calls and screen sharing on Android have only been tried on an emulator so far (chat, formatting and replies were checked).
