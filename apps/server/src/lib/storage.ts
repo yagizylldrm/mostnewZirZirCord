@@ -56,6 +56,9 @@ const INLINE_SAFE = new Set([
 ]);
 export const isInlineSafe = (mime: string) => INLINE_SAFE.has(mime.split(';')[0].trim().toLowerCase());
 
+/** Normalised MIME to store: unsafe types become an opaque download so they can never run as a page. */
+export const safeMime = (mime: string) => (isInlineSafe(mime) ? mime.split(';')[0].trim().toLowerCase() : 'application/octet-stream');
+
 /**
  * Signed download URL. With `mime`, unsafe types are served as a download with a
  * neutral content type; without it the stored type is used (our own WebP files).
@@ -72,7 +75,8 @@ export function presignGet(key: string, opts: { filename?: string; mime?: string
       ResponseContentDisposition: disposition,
       ResponseContentType: unsafe ? 'application/octet-stream' : undefined,
     }),
-    { expiresIn: 6 * 60 * 60 },
+    // Short-lived: access can't be revoked, so keep the window small (clients refetch messages).
+    { expiresIn: 60 * 60 },
   );
 }
 

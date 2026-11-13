@@ -9,7 +9,7 @@ function resolveApiUrl(): string {
   const fromEnv = import.meta.env.VITE_API_URL as string | undefined;
   if (fromEnv) return fromEnv;
   if (desktop?.apiUrl) return desktop.apiUrl;
-  if (location.protocol === 'file:' || !location.hostname) return 'http://localhost:4000';
+  if (desktop || location.protocol === 'file:' || !location.hostname) return 'http://localhost:4000';
   // Dev: API runs next to the web server on port 4000. Production: same origin under /api is
   // handled by the reverse proxy (see infra/Caddyfile) — set VITE_API_URL for that build.
   return `${location.protocol}//${location.hostname}:4000`;

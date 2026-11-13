@@ -95,7 +95,7 @@ export class SessionHub {
 
   /** Channel ids that currently have recorded voice occupants. */
   async occupiedVoiceChannels(): Promise<string[]> {
-    return (await redis.keys('voice:*')).map((k) => k.slice('voice:'.length));
+    return (await scanKeys('voice:*')).map((k) => k.slice('voice:'.length));
   }
 
   async clearVoiceChannel(sessionId: string, channelId: string) {
@@ -251,7 +251,7 @@ export class SessionHub {
     pipeline.del(K.presence(sessionId), K.host(sessionId));
     for (const c of channels) pipeline.del(K.voice(c.id));
     await pipeline.exec();
-    const connKeys = await redis.keys(`conns:${sessionId}:*`);
+    const connKeys = await scanKeys(`conns:${sessionId}:*`);
     if (connKeys.length) await redis.del(...connKeys);
 
     await Promise.all(channels.filter((c) => c.type === 'VOICE').map((c) => deleteRoom(roomName(sessionId, c.id))));
@@ -272,9 +272,9 @@ export class SessionHub {
    * present user one grace period to reconnect, and check sessions with nobody.
    */
   async recover() {
-    const connKeys = await redis.keys('conns:*');
+    const connKeys = await scanKeys('conns:*');
     if (connKeys.length) await redis.del(...connKeys);
-    const presenceKeys = await redis.keys('pres:*');
+    const presenceKeys = await scanKeys('pres:*');
     for (const key of presenceKeys) {
       const sessionId = key.slice('pres:'.length);
       for (const userId of await redis.zrange(key, 0, -1)) {
@@ -313,4 +313,17 @@ export class SessionHub {
     for (const t of this.timers.values()) clearTimeout(t);
     this.timers.clear();
   }
+}
+
+
+/** Non-blocking replacement for KEYS (which stalls Redis while it walks the whole keyspace). */
+async function scanKeys(match: string): Promise<string[]> {
+  const out: string[] = [];
+  let cursor = '0';
+  do {
+    const [next, batch] = await redis.scan(cursor, 'MATCH', match, 'COUNT', 200);
+    out.push(...batch);
+    cursor = next;
+  } while (cursor !== '0');
+  return [...new Set(out)];
 }

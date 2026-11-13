@@ -1,0 +1,17 @@
+{
+  "name": "@zirzircord/desktop-tauri",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ZirZirCord desktop app (Tauri, system WebView)",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:mac": "tauri build --bundles dmg",
+    "build:win": "tauri build --bundles nsis",
+    "icons": "tauri icon ../desktop/build/icon.png"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.5.0"
+  }
+}

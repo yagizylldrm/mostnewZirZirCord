@@ -1,0 +1,62 @@
+name: Desktop release
+
+# Push a tag like `desktop-v0.1.0` (must match the version in tauri.conf.json) to build
+# installers for macOS, Windows and Linux and attach them to a draft GitHub Release.
+on:
+  push:
+    tags: ['desktop-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, args: '--target aarch64-apple-darwin', rust_targets: 'aarch64-apple-darwin' }
+          - { os: macos-latest, args: '--target x86_64-apple-darwin', rust_targets: 'x86_64-apple-darwin' }
+          - { os: windows-latest, args: '', rust_targets: '' }
+          - { os: ubuntu-22.04, args: '', rust_targets: '' }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop-tauri/src-tauri
+
+      - name: Linux system libraries
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Public URL of the production API (repository variable, e.g. https://<host>.sslip.io).
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop-tauri
+          tagName: desktop-v__VERSION__
+          releaseName: 'ZirZirCord Desktop v__VERSION__'
+          releaseBody: 'Unsigned builds: on macOS right-click the app and choose Open the first time; on Windows choose "More info" then "Run anyway". Linux voice calls are experimental.'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

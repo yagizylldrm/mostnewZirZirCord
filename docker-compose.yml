@@ -35,7 +35,7 @@ services:
     image: livekit/livekit-server:latest
     command: --config /etc/livekit.yaml --node-ip ${LIVEKIT_NODE_IP:-127.0.0.1}
     ports:
-      - "7880:7880"        # signalling (WebSocket)
+      - "127.0.0.1:7880:7880"        # signalling (WebSocket)
       - "7881:7881"        # WebRTC over TCP (fallback)
       - "7882:7882/udp"    # WebRTC over UDP (single muxed port)
     volumes:

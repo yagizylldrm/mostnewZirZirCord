@@ -130,7 +130,14 @@ export async function messageRoutes(app: FastifyInstance) {
       },
     });
     if (attachments.length) {
-      await prisma.attachment.updateMany({ where: { id: { in: attachments.map((a) => a.id) } }, data: { messageId: msg.id } });
+      const claimed = await prisma.attachment.updateMany({
+        where: { id: { in: attachments.map((a) => a.id) }, messageId: null },
+        data: { messageId: msg.id },
+      });
+      if (claimed.count !== attachments.length) {
+        await prisma.message.delete({ where: { id: msg.id } }).catch(() => {});
+        throw badRequest('Invalid attachment');
+      }
       attachments.forEach((a) => (a.messageId = msg.id));
     }
     const dto = { ...(await toMessageDTO({ ...msg, attachments })), nonce: body.nonce };
@@ -144,7 +151,7 @@ export async function messageRoutes(app: FastifyInstance) {
         for (const a of images) {
           try {
             const buf = await getObjectBuffer(a.storageKey);
-            const img = sharp(buf, { animated: false });
+            const img = sharp(buf, { animated: false, limitInputPixels: 80_000_000, sequentialRead: true });
             const meta = await img.metadata();
             const thumb = await img.rotate().resize({ width: 640, height: 640, fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toBuffer();
             const thumbnailKey = `${a.storageKey}.thumb.webp`;
