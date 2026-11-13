@@ -1,4 +1,4 @@
-import { can, type BanDTO } from '@zirzircord/shared';
+import { can, type BanDTO, SET_SESSION_EXPIRY_NOTE } from '@zirzircord/shared';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { Alert, Text, TextInput, View } from 'react-native';
@@ -50,7 +50,7 @@ export function SessionSettingsSheet({ sessionId, visible, onClose }: { sessionI
       <View style={s.card}>
         <ToggleRow
           title="Set session"
-          desc={isOwner ? (me.isGuest ? 'Create an account first.' : 'Keep this session after everyone leaves.') : 'Owner only.'}
+          desc={isOwner ? (me.isGuest ? 'Create an account first.' : `Keep this session after everyone leaves. ${SET_SESSION_EXPIRY_NOTE}`) : 'Owner only.'}
           value={sess.isSet}
           disabled={!isOwner || (me.isGuest && !sess.isSet)}
           onChange={(v) => update({ isSet: v })}

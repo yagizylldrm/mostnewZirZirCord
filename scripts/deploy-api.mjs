@@ -82,8 +82,9 @@ const serverEnv = {
   // "zirzircord-xyz" Vercel project. localhost:14320 = the Tauri desktop app's UI.
   // Add preview deployments in infra/.env.cloud, e.g. https://zirzircord-*-<team>.vercel.app
   CORS_ORIGINS: cfg.CORS_ORIGINS || 'https://zirzircord.vercel.app,http://localhost:5173,http://localhost:14320',
-  // 'log' lets older phone / Electron builds (without the app header) keep working during a rollout.
-  CLIENT_CHECK: cfg.CLIENT_CHECK || 'enforce',
+  // 'log' (default for now): phone / Electron builds from before the app header keep working,
+  // offenders are only logged. Set CLIENT_CHECK=enforce in infra/.env.cloud once everyone has updated.
+  CLIENT_CHECK: cfg.CLIENT_CHECK || 'log',
   SESSION_SLEEP_DAYS: cfg.SESSION_SLEEP_DAYS || '5',
   SESSION_DELETE_AFTER_SLEEP_DAYS: cfg.SESSION_DELETE_AFTER_SLEEP_DAYS || '30',
   DATABASE_URL: cfg.DATABASE_URL,

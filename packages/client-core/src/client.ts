@@ -324,7 +324,7 @@ export class ZirZirClient {
       const name = this.state.sessions[sessionId]?.session.name;
       this.dropSession(sessionId);
       if (reason === 'deleted' && name) this.notify(`"${name}" was deleted by its owner`);
-      if (reason === 'expired' && name) this.notify(`"${name}" was deleted after ${SLEEP.deleteAfterDays} days asleep`);
+      if (reason === 'expired' && name) this.notify(`"${name}" was deleted after ${SLEEP.deleteAfterDays} days asleep. Its messages and files are gone.`);
       this.refreshSidebar();
     });
     socket.on('session:removed', ({ sessionId, reason }) => {

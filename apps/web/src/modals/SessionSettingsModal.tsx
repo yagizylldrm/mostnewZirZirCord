@@ -1,4 +1,4 @@
-import { PROFILE_IMAGE_MAX_BYTES, can, canModerate, formatSessionCode, type BanDTO, type SessionDTO } from '@zirzircord/shared';
+import { PROFILE_IMAGE_MAX_BYTES, can, canModerate, formatSessionCode, type BanDTO, type SessionDTO, SET_SESSION_EXPIRY_NOTE } from '@zirzircord/shared';
 import { listedMembers, memberName } from '@zirzircord/client-core';
 import { Copy, RefreshCw } from 'lucide-react';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
@@ -84,7 +84,7 @@ export function SessionSettingsModal() {
         <div className="divide-y divide-line">
           <ToggleRow
             title="Set session"
-            desc={isOwner ? (me.isGuest ? 'Create an account to make set sessions.' : 'Keep this session (and its history) after everyone leaves.') : 'Only the owner can change this.'}
+            desc={isOwner ? (me.isGuest ? 'Create an account to make set sessions.' : `Keep this session (and its history) after everyone leaves. ${SET_SESSION_EXPIRY_NOTE}`) : 'Only the owner can change this.'}
             checked={s.isSet}
             disabled={!isOwner || (me.isGuest && !s.isSet)}
             onChange={(v) => update({ isSet: v })}

@@ -1,5 +1,5 @@
 import { sessionUnread, sleepLabel } from '@zirzircord/client-core';
-import { formatSessionCode, type SessionDTO } from '@zirzircord/shared';
+import { formatSessionCode, type SessionDTO, SET_SESSION_EXPIRY_NOTE, SLEEP } from '@zirzircord/shared';
 import { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -73,7 +73,7 @@ export function HomeScreen() {
         )}
         <Section title="Set sessions">
           {setSessions.length === 0 ? (
-            <Text style={s.muted}>Permanent sessions you've visited show up here. Open one any time — if nobody is there, you start hosting it.</Text>
+            <Text style={s.muted}>Set sessions you've visited show up here. Open one any time — if nobody is there, you start hosting it. One that nobody opens for {SLEEP.afterDays + SLEEP.deleteAfterDays} days is deleted with all its messages and files.</Text>
           ) : (
             setSessions.map((i) => (
               <SessionRow
@@ -151,7 +151,7 @@ function CreateSheet({ visible, onClose }: { visible: boolean; onClose: () => vo
   return (
     <Sheet visible={visible} title="Create a session" onClose={onClose}>
       <TextInput style={s.input} placeholder={`${me.displayName}'s session`} placeholderTextColor={C.faint} value={name} onChangeText={setName} maxLength={48} />
-      <ToggleRow title="Set session" desc={me.isGuest ? 'Create an account to make permanent sessions.' : 'Stays available after everyone leaves.'} value={isSet} onChange={setIsSet} disabled={me.isGuest} />
+      <ToggleRow title="Set session" desc={me.isGuest ? 'Create an account to make set sessions.' : `Stays available after everyone leaves. ${SET_SESSION_EXPIRY_NOTE}`} value={isSet} onChange={setIsSet} disabled={me.isGuest} />
       <Btn
         title="Create"
         busy={busy}

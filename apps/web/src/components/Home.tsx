@@ -1,3 +1,4 @@
+import { SLEEP } from '@zirzircord/shared';
 import { Crown, LogIn, Plus, Radio, Trash2 } from 'lucide-react';
 import { sleepLabel } from '@zirzircord/client-core';
 import { openModal, useApp, zz } from '../lib/zz';
@@ -75,7 +76,8 @@ export function Home() {
             <h2 className="text-xs font-bold tracking-wider text-muted uppercase">Set sessions</h2>
             {setSessions.length === 0 ? (
               <p className="rounded-lg border border-dashed border-line p-5 text-sm text-muted">
-                Set sessions are permanent sessions you have visited. Open one any time: if nobody is there, you start hosting it.
+                Set sessions are saved sessions you have visited. Open one any time: if nobody is there, you start hosting it. A set session nobody opens
+                for {SLEEP.afterDays + SLEEP.deleteAfterDays} days is deleted with all its messages and files.
               </p>
             ) : (
               setSessions.map((i) => {

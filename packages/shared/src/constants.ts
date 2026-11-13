@@ -22,6 +22,8 @@ export const LIMITS = {
 
 /** Set sessions with no activity go to sleep, then get deleted (days). */
 export const SLEEP = { afterDays: 5, deleteAfterDays: 30, warnDays: 7 } as const;
+/** Shown wherever set sessions are described: they are kept, but not forever when unused. */
+export const SET_SESSION_EXPIRY_NOTE = `If nobody opens it for ${SLEEP.afterDays + SLEEP.deleteAfterDays} days, it is deleted with all its messages and files. This can't be undone.`;
 
 /** Spam protection: messages allowed per window, and the escalating automatic timeouts. */
 export const SPAM = {
