@@ -161,6 +161,9 @@ export async function sessionRoutes(app: FastifyInstance) {
     const { id } = sid.parse(req.params);
     const body = updateSessionSchema.parse(req.body);
     const m = await requirePermission(id, req.auth.userId, 'session.editSettings');
+    if (body.gifRating !== undefined && body.gifRating !== m.session.gifRating && !can(m.role, 'session.gifRating')) {
+      throw forbidden('Only the owner can change the GIF rating');
+    }
     if (body.isSet !== undefined && body.isSet !== m.session.isSet) {
       if (!can(m.role, 'session.toggleSet')) throw forbidden('Only the owner can change this');
       const owner = await prisma.user.findUniqueOrThrow({ where: { id: m.session.ownerId } });

@@ -7,6 +7,7 @@ import { formatBytes, formatDuration } from '../lib/format';
 import { VoiceRecorder, fileToOutgoing } from '../lib/media';
 import { useApp, zz } from '../lib/zz';
 import { EmojiPicker } from './EmojiPicker';
+import { GifPanel } from './GifPanel';
 import { FormattedText } from './FormattedText';
 import { StickerPanel } from './StickerPanel';
 import { Avatar, IconButton, cx } from './ui';
@@ -28,7 +29,7 @@ export function Composer(p: { sessionId: string; channelId: string; channelName:
     meId: s.me!.id,
   }));
   const uploads = allUploads.filter((u) => u.channelId === p.channelId);
-  const [panel, setPanel] = useState<'emoji' | 'stickers' | null>(null);
+  const [panel, setPanel] = useState<'emoji' | 'stickers' | 'gif' | null>(null);
   // @mention autocomplete: names typed as "@Name" are turned into <@id> tokens when sending.
   const mentionMap = useRef(new Map<string, string>());
   const [suggest, setSuggest] = useState<{ query: string; index: number } | null>(null);
@@ -290,6 +291,9 @@ export function Composer(p: { sessionId: string; channelId: string; channelName:
               }}
             />
             <div className="relative flex">
+              <IconButton label="GIFs" onClick={() => setPanel(panel === 'gif' ? null : 'gif')} active={panel === 'gif'}>
+                <span className="rounded border-[1.5px] border-current px-[3px] text-[10px] leading-[14px] font-extrabold">GIF</span>
+              </IconButton>
               <IconButton label="Stickers" onClick={() => setPanel(panel === 'stickers' ? null : 'stickers')} active={panel === 'stickers'}>
                 <Sticker size={20} />
               </IconButton>
@@ -297,6 +301,16 @@ export function Composer(p: { sessionId: string; channelId: string; channelName:
                 <Smile size={20} />
               </IconButton>
               {panel === 'emoji' && <EmojiPicker onPick={onEmoji} onClose={closePanel} />}
+              {panel === 'gif' && (
+                <GifPanel
+                  sessionId={p.sessionId}
+                  onClose={closePanel}
+                  onSend={(gif) => {
+                    closePanel();
+                    void zz.sendGif(p.channelId, gif);
+                  }}
+                />
+              )}
               {panel === 'stickers' && (
                 <StickerPanel onClose={closePanel} onSend={(id) => zz.attempt(() => zz.sendSticker(p.sessionId, p.channelId, id))} />
               )}

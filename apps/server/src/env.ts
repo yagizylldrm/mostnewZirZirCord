@@ -26,6 +26,9 @@ const schema = z.object({
    * 'log': only log offenders (lets old phone/desktop builds work during a rollout).
    */
   CLIENT_CHECK: z.enum(['enforce', 'log']).default('enforce'),
+  /** GIPHY API key (developers.giphy.com). Without it the GIF picker says GIFs aren't set up. */
+  GIPHY_API_KEY: z.string().optional(),
+  GIPHY_API_URL: z.string().url().default('https://api.giphy.com'),
   S3_ENDPOINT: z.string().url(),
   S3_PUBLIC_ENDPOINT: z.string().url(),
   S3_REGION: z.string().default('us-east-1'),

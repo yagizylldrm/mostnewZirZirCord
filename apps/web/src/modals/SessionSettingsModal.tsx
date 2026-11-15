@@ -1,4 +1,4 @@
-import { PROFILE_IMAGE_MAX_BYTES, can, canModerate, formatSessionCode, type BanDTO, type SessionDTO, SET_SESSION_EXPIRY_NOTE } from '@zirzircord/shared';
+import { GIF_RATINGS, GIF_RATING_INFO, PROFILE_IMAGE_MAX_BYTES, can, type GifRating, canModerate, formatSessionCode, type BanDTO, type SessionDTO, SET_SESSION_EXPIRY_NOTE } from '@zirzircord/shared';
 import { listedMembers, memberName } from '@zirzircord/client-core';
 import { Copy, RefreshCw } from 'lucide-react';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
@@ -99,6 +99,7 @@ export function SessionSettingsModal() {
             onChange={(v) => update({ membersCanMentionEveryone: v })}
           />
         </div>
+        <GifRatingSetting s={s} canEdit={can(view.myRole, 'session.gifRating')} onChange={(gifRating) => update({ gifRating })} />
         {isOwner && (
           <div className="rounded-lg border border-danger/40 p-3">
             <div className="text-sm font-semibold text-danger">Delete session</div>
@@ -338,5 +339,36 @@ function PictureSetting({ s }: { s: SessionDTO }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Highest GIF rating in this session (owner only). */
+function GifRatingSetting({ s, canEdit, onChange }: { s: SessionDTO; canEdit: boolean; onChange: (r: GifRating) => void }) {
+  return (
+    <fieldset className="rounded-lg bg-side p-3">
+      <legend className="sr-only">GIF rating</legend>
+      <div className="text-sm font-semibold">GIF rating</div>
+      <p className="mb-2 text-xs text-muted">{canEdit ? 'The strongest GIFs people can search and send here (from GIPHY).' : 'Only the owner can change this.'}</p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {GIF_RATINGS.map((r) => (
+          <button
+            key={r}
+            type="button"
+            disabled={!canEdit && s.gifRating !== r}
+            aria-pressed={s.gifRating === r}
+            onClick={() => canEdit && s.gifRating !== r && onChange(r)}
+            title={GIF_RATING_INFO[r].desc}
+            className={cx(
+              'rounded-md border px-2 py-1.5 text-left transition disabled:opacity-40',
+              s.gifRating === r ? 'border-brand bg-brand/15' : 'border-line hover:border-muted',
+              !canEdit && 'cursor-default',
+            )}
+          >
+            <div className="text-sm font-bold">{GIF_RATING_INFO[r].label}</div>
+            <div className="text-[11px] leading-tight text-muted">{GIF_RATING_INFO[r].desc}</div>
+          </button>
+        ))}
+      </div>
+    </fieldset>
   );
 }

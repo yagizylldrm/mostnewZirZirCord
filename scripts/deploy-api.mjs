@@ -87,6 +87,8 @@ const serverEnv = {
   CLIENT_CHECK: cfg.CLIENT_CHECK || 'log',
   SESSION_SLEEP_DAYS: cfg.SESSION_SLEEP_DAYS || '5',
   SESSION_DELETE_AFTER_SLEEP_DAYS: cfg.SESSION_DELETE_AFTER_SLEEP_DAYS || '30',
+  // GIPHY key for the GIF picker (optional: without it the picker says GIFs aren't set up).
+  ...(cfg.GIPHY_API_KEY && !cfg.GIPHY_API_KEY.includes('<') ? { GIPHY_API_KEY: cfg.GIPHY_API_KEY } : {}),
   DATABASE_URL: cfg.DATABASE_URL,
   JWT_SECRET: cfg.JWT_SECRET,
   PRESENCE_GRACE_SECONDS: cfg.PRESENCE_GRACE_SECONDS || '30',

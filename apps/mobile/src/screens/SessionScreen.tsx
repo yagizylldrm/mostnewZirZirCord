@@ -1,5 +1,6 @@
+import { Image } from 'expo-image';
 import { AudioSession, VideoView } from '@livekit/react-native';
-import { type CallParticipant, type LocalMessage, isChannelMuted, isSessionMuted, listedMembers, memberName, mentionsToText, sessionUnread } from '@zirzircord/client-core';
+import { type CallParticipant, type LocalMessage, isChannelMuted, isSessionMuted, listedMembers, memberName, mentionsToText, sessionUnread, mediaLabel } from '@zirzircord/client-core';
 import { QUICK_REACTIONS, can, canCreateChannel, canModerate, formatPlainText, formatSessionCode, isJumboEmoji, splitMentions, type MessageDTO } from '@zirzircord/shared';
 import * as Clipboard from 'expo-clipboard';
 import { type ComponentRef, useEffect, useMemo, useState, useRef } from 'react';
@@ -239,6 +240,14 @@ function Messages({ sessionId, channelId, onReply }: { sessionId: string; channe
                     <FormattedText text={m.content} view={view} trailing={m.editedAt ? <Text style={{ color: C.faint, fontSize: 10 }}> (edited)</Text> : undefined} />
                   )
                 ) : null}
+                {m.gif && (
+                  <Image
+                    source={{ uri: m.gif.url }}
+                    accessibilityLabel={m.gif.title || 'GIF'}
+                    style={{ width: Math.min(260, m.gif.width), aspectRatio: m.gif.width / m.gif.height, borderRadius: 8, backgroundColor: C.side }}
+                    contentFit="cover"
+                  />
+                )}
                 {m.attachments.map((a) => (
                   <AttachmentView key={a.id} a={a} />
                 ))}
@@ -307,7 +316,7 @@ function Messages({ sessionId, channelId, onReply }: { sessionId: string; channe
 
 /** The "↩ Name  text" line above a reply; tapping it jumps to the original when it is loaded. */
 function ReplyQuote({ original, view, onPress }: { original?: MessageDTO; view: Parameters<typeof memberName>[0]; onPress: () => void }) {
-  const preview = original ? formatPlainText(mentionsToText(original.content, view)).replace(/\s+/g, ' ') || '📎 Attachment' : 'Original message not loaded';
+  const preview = original ? formatPlainText(mentionsToText(original.content, view)).replace(/\s+/g, ' ') || mediaLabel(original) : 'Original message not loaded';
   return (
     <Pressable onPress={onPress} disabled={!original} style={[s.row, { gap: 6, borderLeftWidth: 2, borderLeftColor: C.line, paddingLeft: 8 }]}>
       <Text style={{ color: C.muted, fontSize: 12, flexShrink: 1 }} numberOfLines={1}>

@@ -5,6 +5,7 @@ import type {
   ChannelDTO,
   CreateChannelInput,
   CreateUploadInput,
+  GifPage,
   MemberDTO,
   MessageDTO,
   NotifySettings,
@@ -394,6 +395,12 @@ export class ApiClient {
   }
   deleteMessage(id: string) {
     return this.request('DELETE', `/messages/${id}`);
+  }
+  trendingGifs(sessionId: string, offset = 0) {
+    return this.request<GifPage>('GET', `/sessions/${sessionId}/gifs/trending?offset=${offset}`);
+  }
+  searchGifs(sessionId: string, q: string, offset = 0) {
+    return this.request<GifPage>('GET', `/sessions/${sessionId}/gifs/search?q=${encodeURIComponent(q)}&offset=${offset}`);
   }
   async react(messageId: string, emoji: string) {
     return (await this.request<{ reactions: ReactionDTO[] }>('PUT', `/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`)).reactions;

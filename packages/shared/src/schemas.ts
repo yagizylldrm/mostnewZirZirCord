@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ATTACHMENT_KINDS, AUDIO_PRESETS, LIMITS, NOTIFY_LEVELS, PROFILE_IMAGE_MAX_BYTES, PROFILE_IMAGE_MIMES, STATUSES, TIMEOUT_MINUTES } from './constants';
+import { ATTACHMENT_KINDS, AUDIO_PRESETS, LIMITS, NOTIFY_LEVELS, PROFILE_IMAGE_MAX_BYTES, PROFILE_IMAGE_MIMES, GIF_RATINGS, STATUSES, TIMEOUT_MINUTES } from './constants';
 
 const name = (max: number) => z.string().trim().min(1).max(max);
 
@@ -85,6 +85,8 @@ export const updateSessionSchema = z.object({
   membersCanMentionEveryone: z.boolean().optional(),
   /** Finished `/me/media-upload` (purpose sessionIcon); null removes the picture. Set sessions only. */
   iconUploadId: z.string().uuid().nullable().optional(),
+  /** Highest GIF rating allowed (owner only). */
+  gifRating: z.enum(GIF_RATINGS).optional(),
 });
 
 export const timeoutSchema = z.object({
@@ -131,12 +133,19 @@ export const sendMessageSchema = z
     replyToId: z.string().uuid().optional(),
     attachmentIds: z.array(z.string().uuid()).max(LIMITS.attachmentsPerMessage).default([]),
     stickerId: z.string().uuid().optional(),
+    /** A GIPHY GIF id; the server looks the GIF up itself. */
+    gifId: z.string().regex(/^[A-Za-z0-9]{1,64}$/).optional(),
     /** Client-generated id echoed back so the sender can match its optimistic message. */
     nonce: z.string().max(64).optional(),
   })
-  .refine((m) => m.content.trim().length > 0 || m.attachmentIds.length > 0 || !!m.stickerId, {
-    message: 'Message must have text, attachments or a sticker',
+  .refine((m) => m.content.trim().length > 0 || m.attachmentIds.length > 0 || !!m.stickerId || !!m.gifId, {
+    message: 'Message must have text, attachments, a sticker or a GIF',
   });
+
+export const gifSearchSchema = z.object({
+  q: z.string().trim().max(100).optional(),
+  offset: z.coerce.number().int().min(0).max(4999).default(0),
+});
 
 export const editMessageSchema = z.object({
   content: z.string().trim().min(1).max(LIMITS.message),

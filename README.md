@@ -200,6 +200,14 @@ Voice quality depends on the server's bandwidth. Each listener receives every ac
 - **Android background calls.** A call keeps running while you switch apps briefly, but a long background call needs a foreground-service notification (e.g. with Notifee).
 - **Not built yet:** friends/DMs, push notifications, message search, end-to-end encryption.
 
+## GIFs
+
+The GIF picker uses **GIPHY** (the library Instagram uses). The API key stays on the server: apps search through the API, results are cached for 10 minutes, and GIFs are shown straight from GIPHY's servers. A sent GIF is looked up by id on the server, so a message can never point a "GIF" at another website.
+
+- **Set up:** create a key at [developers.giphy.com](https://developers.giphy.com), add `GIPHY_API_KEY=…` to `infra/.env.cloud` (or `.env` locally) and redeploy the API. Without a key the picker says GIFs aren't set up.
+- **Limits:** a new key is a "beta" key (about 100 searches per hour across everyone). For a public launch, apply for a production key in the GIPHY dashboard; they ask for screenshots of the "Powered by GIPHY" label shown in the picker.
+- **Rating:** each session's owner picks the strongest GIFs allowed (G, PG, PG-13 or R; new sessions use PG-13) in Session settings. Search and sending both follow it.
+
 ## Abuse protection
 
 - **App-only API.** Requests from any website not listed in `CORS_ORIGINS` are refused, and requests without a web origin must come from the official apps (they send an `X-ZZ-Client` header). This stops other sites and casual scripts. It can't stop someone who copies the header and uses their own login token: that is what the limits below are for. Older phone or Electron builds don't send the header, so `npm run deploy:api` starts in `CLIENT_CHECK=log` mode (offenders are only logged). Put `CLIENT_CHECK=enforce` in `infra/.env.cloud` and redeploy once everyone has updated.
