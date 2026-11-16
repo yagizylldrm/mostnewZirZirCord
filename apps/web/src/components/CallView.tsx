@@ -11,6 +11,7 @@ import {
   Minimize2,
   MonitorUp,
   PhoneOff,
+  Shrink,
   Video,
   VideoOff,
   Volume2,
@@ -123,25 +124,57 @@ export function ScreenMuteButton({ p, className }: { p: CallParticipant; classNa
   );
 }
 
+type FsDoc = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => Promise<void> | void };
+type FsEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
+
+/** Fullscreen for one element, with a toggle (the Fullscreen API only exits via exitFullscreen, not by asking again). */
+function useFullscreen(ref: React.RefObject<HTMLElement | null>) {
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    const sync = () => {
+      const d = document as FsDoc;
+      setFull((d.fullscreenElement ?? d.webkitFullscreenElement) === ref.current && !!ref.current);
+    };
+    document.addEventListener('fullscreenchange', sync);
+    document.addEventListener('webkitfullscreenchange', sync);
+    return () => {
+      document.removeEventListener('fullscreenchange', sync);
+      document.removeEventListener('webkitfullscreenchange', sync);
+    };
+  }, [ref]);
+  const toggle = () => {
+    const d = document as FsDoc;
+    const el = ref.current as FsEl | null;
+    if (d.fullscreenElement ?? d.webkitFullscreenElement) void (d.exitFullscreen?.() ?? d.webkitExitFullscreen?.());
+    else if (el) void (el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.());
+  };
+  return { full, toggle };
+}
+
 function ScreenStage({ p, sessionId }: { p: CallParticipant; sessionId: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  const { full, toggle: toggleFullscreen } = useFullscreen(ref);
   const view = useApp((s) => s.sessions[sessionId]);
   const name = view?.members[p.id]?.nickname || view?.members[p.id]?.user.displayName || p.name;
   const btn = 'rounded-md bg-black/60 p-1.5 hover:bg-black/80';
   return (
     <div ref={ref} className="group relative size-full overflow-hidden rounded-xl bg-black">
-      <VideoEl identity={p.id} source="screen" contain />
+      <div className="size-full" onDoubleClick={toggleFullscreen}>
+        <VideoEl identity={p.id} source="screen" contain />
+      </div>
       <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 text-sm">
         <MonitorUp size={14} className="text-ok" /> {p.isLocal ? 'Your screen' : `${name}'s screen`}
         {p.screenAudioMuted && <VolumeX size={14} className="text-danger" aria-label="Stream sound muted" />}
       </div>
       <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 max-md:opacity-100">
         <ScreenMuteButton p={p} className={btn} />
-        <button onClick={() => minimizeScreen(sessionId, p.id)} className={btn} aria-label="Minimize" title="Minimize (keep watching over the chat)">
-          <Minimize2 size={16} />
-        </button>
-        <button onClick={() => ref.current?.requestFullscreen?.()} className={btn} aria-label="Fullscreen" title="Fullscreen">
-          <Expand size={16} />
+        {!full && (
+          <button onClick={() => minimizeScreen(sessionId, p.id)} className={btn} aria-label="Minimize" title="Minimize (keep watching over the chat)">
+            <Minimize2 size={16} />
+          </button>
+        )}
+        <button onClick={toggleFullscreen} className={btn} aria-label={full ? 'Exit fullscreen' : 'Fullscreen'} title={full ? 'Exit fullscreen (Esc)' : 'Fullscreen'}>
+          {full ? <Shrink size={16} /> : <Expand size={16} />}
         </button>
       </div>
     </div>

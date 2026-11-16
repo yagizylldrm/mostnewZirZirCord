@@ -4,7 +4,7 @@ import { ScreenPicker } from './components/ScreenPicker';
 import { Shell } from './components/Shell';
 import { Logo, Toasts } from './components/ui';
 import { desktop } from './lib/desktop';
-import { normalizeSessionCode } from '@zirzircord/shared';
+import { matchShortcut, normalizeSessionCode } from '@zirzircord/shared';
 import { call, openModal, ui, useApp } from './lib/zz';
 
 /** Push-to-talk: in-window key handling (desktop app adds a global hook). */
@@ -36,6 +36,22 @@ function usePushToTalk() {
       offDesktop?.();
       unsub();
     };
+  }, []);
+}
+
+/** App shortcuts (mic, deafen, camera, member list). Modifier combos only, so they also work while typing. */
+function useShortcuts() {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      const id = matchShortcut(ui.getState().shortcuts, e);
+      if (!id) return;
+      e.preventDefault();
+      if (id === 'toggleMembers') ui.setState((u) => ({ membersOpen: !u.membersOpen }));
+      else if (call.state.status !== 'idle') void (id === 'toggleMic' ? call.toggleMic() : id === 'toggleDeafen' ? call.toggleDeafen() : call.toggleCamera());
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 }
 
@@ -84,6 +100,7 @@ export function App() {
 function AppInner() {
   const { ready, me, adding } = useApp((s) => ({ ready: s.ready, me: s.me, adding: s.addingAccount }));
   usePushToTalk();
+  useShortcuts();
   useJoinLinks(!!me);
 
   return (

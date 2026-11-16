@@ -1,18 +1,19 @@
-import { PROFILE_IMAGE_MAX_BYTES, STATUSES, type UserStatus } from '@zirzircord/shared';
+import { type Combo, PROFILE_IMAGE_MAX_BYTES, SHORTCUTS, SHORTCUT_IDS, STATUSES, type ShortcutId, type UserStatus, comboFromEvent, defaultBindings, findConflict, formatCombo } from '@zirzircord/shared';
 import { Copy } from 'lucide-react';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { SOUND_GROUPS, type SoundGroup } from '@zirzircord/client-core';
 import { Play } from 'lucide-react';
 import { useStore } from 'zustand';
+import { ImageCropper } from '../components/ImageCropper';
 import { Avatar, Banner, Button, Field, Modal, Toggle, ToggleRow, cx, inputCls } from '../components/ui';
 import { sounds } from '../lib/sounds';
 import { copyText } from '../lib/format';
 import { desktop } from '../lib/desktop';
 import { call, closeModal, openModal, ui, useApp, useCall, useUi, zz } from '../lib/zz';
 
-type Tab = 'profile' | 'account' | 'voice' | 'sounds';
+type Tab = 'profile' | 'account' | 'voice' | 'keybinds' | 'sounds';
 
-const TABS: Tab[] = ['profile', 'account', 'voice', 'sounds'];
+const TABS: Tab[] = ['profile', 'account', 'voice', 'keybinds', 'sounds'];
 
 export function UserSettingsModal({ initialTab }: { initialTab?: string }) {
   const [tab, setTab] = useState<Tab>(TABS.includes(initialTab as Tab) ? (initialTab as Tab) : 'profile');
@@ -25,6 +26,7 @@ export function UserSettingsModal({ initialTab }: { initialTab?: string }) {
               ['profile', 'Profile'],
               ['account', 'Account'],
               ['voice', 'Voice & video'],
+              ['keybinds', 'Keybinds'],
               ['sounds', 'Sounds'],
             ] as [Tab, string][]
           ).map(([t, l]) => (
@@ -41,6 +43,7 @@ export function UserSettingsModal({ initialTab }: { initialTab?: string }) {
           {tab === 'profile' && <Profile />}
           {tab === 'account' && <Account />}
           {tab === 'voice' && <VoiceSettings />}
+          {tab === 'keybinds' && <KeybindSettings />}
           {tab === 'sounds' && <SoundSettings />}
         </div>
       </div>
@@ -61,9 +64,15 @@ function Profile() {
     e.preventDefault();
     if (await zz.attempt(() => zz.updateProfile({ displayName: name.trim(), bio, bannerColor: color, status }))) zz.notify('Profile saved', 'success');
   };
-  const upload = async (kind: 'avatar' | 'banner', f: File | undefined) => {
+  const [cropping, setCropping] = useState<{ kind: 'avatar' | 'banner'; file: File } | null>(null);
+  /** Pictures open the cropper; animated GIFs go up as they are (a canvas would keep only one frame). */
+  const pick = (kind: 'avatar' | 'banner', f: File | undefined) => {
     if (!f) return;
     if (f.size > PROFILE_IMAGE_MAX_BYTES) return zz.notify('Images can be at most 10 MB', 'error');
+    if (f.type === 'image/gif') void upload(kind, f);
+    else setCropping({ kind, file: f });
+  };
+  const upload = async (kind: 'avatar' | 'banner', f: Blob) => {
     setBusy(kind);
     const ok = await zz.attempt(() => (kind === 'avatar' ? zz.uploadAvatar(f, f.type) : zz.uploadBanner(f, f.type)));
     setBusy(null);
@@ -114,8 +123,16 @@ function Profile() {
         <p className="px-4 pb-3 text-xs text-faint">
           PNG, JPG, WebP or <b>GIF</b> (up to 10 MB). Animated avatars move when you talk in voice, when someone hovers them, and on your profile card.
         </p>
-        <input ref={fileRef} type="file" accept={accept} hidden onChange={(e) => (upload('avatar', e.target.files?.[0]), (e.target.value = ''))} />
-        <input ref={bannerRef} type="file" accept={accept} hidden onChange={(e) => (upload('banner', e.target.files?.[0]), (e.target.value = ''))} />
+        <input ref={fileRef} type="file" accept={accept} hidden onChange={(e) => (pick('avatar', e.target.files?.[0]), (e.target.value = ''))} />
+        {cropping && (
+          <ImageCropper
+            file={cropping.file}
+            kind={cropping.kind}
+            onCancel={() => setCropping(null)}
+            onDone={(blob) => (setCropping(null), void upload(cropping.kind, blob))}
+          />
+        )}
+        <input ref={bannerRef} type="file" accept={accept} hidden onChange={(e) => (pick('banner', e.target.files?.[0]), (e.target.value = ''))} />
       </div>
       <Field label="Display name">
         <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} maxLength={32} required />
@@ -325,6 +342,66 @@ function VoiceSettings() {
           </Button>
         </Field>
       )}
+    </div>
+  );
+}
+
+const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
+
+function KeybindSettings() {
+  const bindings = useUi((u) => u.shortcuts);
+  const [editing, setEditing] = useState<ShortcutId | null>(null);
+  const [hint, setHint] = useState('');
+
+  const save = (next: typeof bindings) => {
+    ui.setState({ shortcuts: next });
+    try {
+      localStorage.setItem('zz.shortcuts', JSON.stringify(next));
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation(); // Esc cancels here instead of closing the whole dialog
+      if (e.code === 'Escape') return (setEditing(null), setHint(''));
+      const combo = comboFromEvent(e);
+      if (!combo) return setHint('Hold Ctrl, Alt or Cmd and press a key.');
+      const clash = findConflict(bindings, combo, editing);
+      if (clash) return setHint(`${formatCombo(combo, isMac)} is already used for "${SHORTCUTS[clash].label}".`);
+      save({ ...bindings, [editing]: combo as Combo });
+      setEditing(null);
+      setHint('');
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [editing, bindings]);
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted">These work anywhere in the app, even while you type. Push-to-talk is set under Voice &amp; video.</p>
+      <div className="divide-y divide-line">
+        {SHORTCUT_IDS.map((id) => (
+          <div key={id} className="flex items-center justify-between gap-3 py-2.5">
+            <span className="text-sm">{SHORTCUTS[id].label}</span>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" className="min-w-28 font-mono text-xs" onClick={() => (setEditing(editing === id ? null : id), setHint(''))}>
+                {editing === id ? 'Press keys…' : bindings[id] ? formatCombo(bindings[id]!, isMac) : 'Not set'}
+              </Button>
+              {bindings[id] && editing !== id && (
+                <Button variant="ghost" className="px-2 py-1.5 text-xs" onClick={() => save({ ...bindings, [id]: null })}>
+                  Clear
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      {hint && <p className="text-xs text-warn">{hint}</p>}
+      <Button variant="ghost" className="px-3 py-1.5 text-xs" onClick={() => (save(defaultBindings()), setEditing(null), setHint(''))}>
+        Reset to defaults
+      </Button>
     </div>
   );
 }

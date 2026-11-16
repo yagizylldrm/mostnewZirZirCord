@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { type ButtonHTMLAttributes, type ReactNode, useEffect, useState } from 'react';
+import { type ButtonHTMLAttributes, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { colorFor, initials } from '../lib/format';
 import { useApp, zz } from '../lib/zz';
 
@@ -215,4 +215,58 @@ export function RoleBadge({ role }: { role: string }) {
 
 export function Logo({ size = 40 }: { size?: number }) {
   return <img src="./logo.svg" width={size} height={size} alt="ZirZirCord" draggable={false} />;
+}
+
+export interface ContextMenuItem {
+  label: string;
+  icon?: ReactNode;
+  onSelect: () => void;
+  danger?: boolean;
+}
+
+/** A right-click menu at the pointer, kept inside the window; closes on Esc, outside click, scroll or resize. */
+export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; items: ContextMenuItem[]; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: x, top: y });
+  useLayoutEffect(() => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    setPos({ left: Math.max(4, Math.min(x, window.innerWidth - r.width - 4)), top: Math.max(4, Math.min(y, window.innerHeight - r.height - 4)) });
+  }, [x, y]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onClose);
+    window.addEventListener('blur', onClose);
+    document.addEventListener('scroll', onClose, true);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onClose);
+      window.removeEventListener('blur', onClose);
+      document.removeEventListener('scroll', onClose, true);
+    };
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50" onMouseDown={onClose} onContextMenu={(e) => (e.preventDefault(), onClose())}>
+      <div
+        ref={ref}
+        role="menu"
+        className="absolute w-52 rounded-lg border border-line bg-elev p-1.5 text-sm shadow-xl"
+        style={pos}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        {items.map((it) => (
+          <button
+            key={it.label}
+            role="menuitem"
+            onClick={() => (onClose(), it.onSelect())}
+            className={cx('flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left', it.danger ? 'text-danger hover:bg-danger hover:text-white' : 'hover:bg-hover')}
+          >
+            {it.label}
+            {it.icon}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }

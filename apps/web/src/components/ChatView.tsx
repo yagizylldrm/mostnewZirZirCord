@@ -1,7 +1,7 @@
 import { QUICK_REACTIONS, can, formatPlainText, isJumboEmoji } from '@zirzircord/shared';
 import { type LocalMessage, memberName, mentionsToText, mediaLabel } from '@zirzircord/client-core';
 import type { MessageDTO } from '@zirzircord/shared';
-import { Clock, Hash, Pencil, Reply, SmilePlus, Trash2, Users } from 'lucide-react';
+import { Clock, Copy, Hash, Pencil, Reply, SmilePlus, Trash2, Users } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { formatDay, formatTime } from '../lib/format';
 import { ui, useApp, zz } from '../lib/zz';
@@ -10,7 +10,7 @@ import { Composer } from './Composer';
 import { EmojiPicker } from './EmojiPicker';
 import { GifView } from './GifView';
 import { FormattedText } from './FormattedText';
-import { Avatar, IconButton, cx } from './ui';
+import { Avatar, ContextMenu, type ContextMenuItem, IconButton, cx } from './ui';
 
 /** For editing: tokens → "@Name"; on save, names of mentioned members → tokens again. */
 function tokensToNames(content: string, view: Parameters<typeof memberName>[0]) {
@@ -222,9 +222,34 @@ function MessageRow(p: {
     if (next && next !== p.m.content) await zz.attempt(() => zz.api.editMessage(p.m.id, next));
   };
 
+  const [menu, setMenu] = useState<null | { x: number; y: number }>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const menuItems: ContextMenuItem[] = [
+    ...(canReact ? [{ label: 'Add reaction', icon: <SmilePlus size={14} />, onSelect: openPicker }] : []),
+    { label: 'Reply', icon: <Reply size={14} />, onSelect: p.onReply },
+    ...(p.m.content
+      ? [
+          {
+            label: 'Copy message',
+            icon: <Copy size={14} />,
+            onSelect: () => void navigator.clipboard?.writeText(tokensToNames(p.m.content, view)).then(() => zz.notify('Copied', 'success'), () => zz.notify('Could not copy', 'error')),
+          },
+        ]
+      : []),
+    ...(p.canEdit && p.m.content ? [{ label: 'Edit message', icon: <Pencil size={14} />, onSelect: () => (setDraft(tokensToNames(p.m.content, view)), setEditing(true)) }] : []),
+    ...(p.canDelete ? [{ label: 'Delete message', icon: <Trash2 size={14} />, danger: true, onSelect: () => confirm('Delete this message?') && zz.attempt(() => zz.api.deleteMessage(p.m.id)) }] : []),
+  ];
+  // Keep the browser's own menu for links, images and video (open / save), and while editing.
+  const onContextMenu = (e: React.MouseEvent) => {
+    if (editing || p.m.pending || (e.target as HTMLElement).closest('a,img,video,audio,textarea,input')) return;
+    e.preventDefault();
+    setMenu({ x: e.clientX, y: e.clientY });
+  };
+
   return (
     <div
       ref={rowRef}
+      onContextMenu={onContextMenu}
       className={cx(
         'group relative flex gap-4 px-4 hover:bg-black/10',
         p.grouped ? 'py-0.5' : 'mt-3 pt-1 pb-0.5',
@@ -355,6 +380,7 @@ function MessageRow(p: {
           </IconButton>
         )}
       </div>
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={closeMenu} />}
     </div>
   );
 }
