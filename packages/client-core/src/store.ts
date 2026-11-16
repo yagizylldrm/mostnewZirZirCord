@@ -174,3 +174,12 @@ export function sleepLabel(session: Pick<SessionDTO, 'sleepingSince'>, now = Dat
   const when = days <= 1 ? 'within a day' : `in ${days} days`;
   return { text: urgent ? `💤 Sleeping · deleted ${when} unless someone opens it` : '💤 Sleeping · open it to wake it up', urgent };
 }
+
+/** Short label for a message with no text (notifications, reply previews). */
+export function mediaLabel(m: Pick<MessageDTO, 'gif' | 'attachments'>): string {
+  if (m.gif) return 'GIF';
+  const kind = m.attachments[0]?.kind;
+  if (kind === 'STICKER') return 'Sticker';
+  if (kind === 'VOICE_MESSAGE') return '🎙️ Voice message';
+  return '📎 Attachment';
+}

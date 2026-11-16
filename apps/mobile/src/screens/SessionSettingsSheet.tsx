@@ -1,7 +1,7 @@
-import { can, type BanDTO, SET_SESSION_EXPIRY_NOTE } from '@zirzircord/shared';
+import { GIF_RATINGS, GIF_RATING_INFO, can, type BanDTO, SET_SESSION_EXPIRY_NOTE } from '@zirzircord/shared';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
-import { Alert, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 import { Avatar, Btn, SessionPicture, Sheet, ToggleRow } from '../components/ui';
 import { C, s } from '../theme';
 import { useApp, zz } from '../zz';
@@ -59,6 +59,25 @@ export function SessionSettingsSheet({ sessionId, visible, onClose }: { sessionI
         <ToggleRow title="Members can create voice channels" value={sess.membersCanCreateVoice} onChange={(v) => update({ membersCanCreateVoice: v })} />
         <ToggleRow title="Accounts only" desc="Block guests from joining." value={sess.accountsOnly} onChange={(v) => update({ accountsOnly: v })} />
       </View>
+      <Text style={s.label}>GIF rating{can(view.myRole, 'session.gifRating') ? '' : ' (owner only)'}</Text>
+      <View style={[s.row, { gap: 6 }]}>
+        {GIF_RATINGS.map((r) => {
+          const on = sess.gifRating === r;
+          const mine = can(view.myRole, 'session.gifRating');
+          return (
+            <Pressable
+              key={r}
+              disabled={!mine || on}
+              accessibilityState={{ selected: on }}
+              onPress={() => update({ gifRating: r })}
+              style={{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: on ? C.brand : C.line, backgroundColor: on ? C.brand + '26' : C.side, opacity: !mine && !on ? 0.4 : 1 }}
+            >
+              <Text style={{ color: C.fg, fontWeight: '700' }}>{GIF_RATING_INFO[r].label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <Text style={s.muted}>{GIF_RATING_INFO[sess.gifRating].desc}</Text>
       {isOwner && (
         <>
           <Text style={s.label}>Add moderator by ID</Text>

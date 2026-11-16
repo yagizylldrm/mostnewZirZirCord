@@ -10,6 +10,7 @@ import { env } from './env';
 import { CLIENT_HEADER, checkClient, corsOriginAllowed, enforceClientCheck } from './lib/client-check';
 import { HttpError, unauthorized } from './lib/errors';
 import { clearAccessCache } from './sessions/access';
+import { gifRoutes } from './gifs/routes';
 import { messageRoutes } from './messages/routes';
 import { createRealtime } from './realtime/io';
 import { sessionRoutes } from './sessions/routes';
@@ -84,6 +85,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   await app.register(sessionRoutes);
   await app.register(channelRoutes);
   await app.register(messageRoutes);
+  await app.register(gifRoutes);
   await app.register(uploadRoutes);
   await app.register(stickerRoutes);
   await app.register(voiceWebhookRoutes);

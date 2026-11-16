@@ -46,6 +46,14 @@ enum NotifyLevel {
   NONE
 }
 
+/// Highest GIPHY rating allowed in a session.
+enum GifRating {
+  G
+  PG
+  PG13
+  R
+}
+
 enum AudioPreset {
   VOICE
   HIGH
@@ -111,6 +119,8 @@ model Session {
   lastActiveAt              DateTime     @default(now())
   /// Set sessions asleep after SESSION_SLEEP_DAYS idle; deleted after SESSION_DELETE_AFTER_SLEEP_DAYS asleep.
   sleepingSince             DateTime?
+  /// Owner's choice: highest GIF rating that can be searched / sent here.
+  gifRating                 GifRating    @default(PG13)
 
   // Restrict: deleting a user must hand ownership over first (see users/deletion.ts).
   owner       User            @relation("SessionOwner", fields: [ownerId], references: [id], onDelete: Restrict)
@@ -219,6 +229,8 @@ model Message {
   mentionsEveryone Boolean   @default(false)
   createdAt        DateTime  @default(now())
   editedAt         DateTime?
+  /// GIPHY GIF (GifDTO: ids and giphy.com URLs looked up by the server).
+  gif              Json?
 
   channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
   author      User?        @relation(fields: [authorId], references: [id], onDelete: SetNull)

@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { type ComponentRef, useEffect, useMemo, useRef, useState } from 'react';
 import { ActionSheetIOS, Alert, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { C, formatDuration, s } from '../theme';
-import { EmojiPanel, StickerPanel } from './Pickers';
+import { EmojiPanel, GifPanel, StickerPanel } from './Pickers';
 import { Avatar } from './ui';
 import { call, useApp, zz } from '../zz';
 
@@ -51,7 +51,7 @@ export function Composer({
   const recState = useAudioRecorderState(recorder, 100);
   const levels = useRef<number[]>([]);
   const [recording, setRecording] = useState(false);
-  const [panel, setPanel] = useState<'emoji' | 'stickers' | null>(null);
+  const [panel, setPanel] = useState<'emoji' | 'stickers' | 'gif' | null>(null);
   const { view, meId } = useApp((st) => ({ view: st.sessions[sessionId], meId: st.me!.id }));
   // @mention autocomplete ("@Name" → <@id> on send)
   const mentionMap = useRef(new Map<string, string>());
@@ -250,6 +250,9 @@ export function Composer({
               </Text>
             ))}
           </TextInput>
+          <Pressable onPress={() => setPanel(panel === 'gif' ? null : 'gif')} hitSlop={6} accessibilityLabel="GIFs" style={{ padding: 4 }}>
+            <Text style={{ fontSize: 11, fontWeight: '900', color: C.fg, opacity: panel === 'gif' ? 1 : 0.7, borderWidth: 1.5, borderColor: C.fg, borderRadius: 4, paddingHorizontal: 3 }}>GIF</Text>
+          </Pressable>
           <Pressable onPress={() => setPanel(panel === 'stickers' ? null : 'stickers')} hitSlop={6} accessibilityLabel="Stickers" style={{ padding: 4 }}>
             <Text style={{ fontSize: 19, opacity: panel === 'stickers' ? 1 : 0.7 }}>🏷️</Text>
           </Pressable>
@@ -269,6 +272,7 @@ export function Composer({
         </View>
       )}
       {panel === 'emoji' && <EmojiPanel onPick={(e) => setText((t) => t + e)} />}
+      {panel === 'gif' && <GifPanel sessionId={sessionId} onSend={(gif) => (setPanel(null), zz.sendGif(channelId, gif))} />}
       {panel === 'stickers' && (
         <StickerPanel onSend={(id) => (setPanel(null), zz.attempt(() => zz.sendSticker(sessionId, channelId, id)))} />
       )}

@@ -5,6 +5,7 @@ import { LIMITS, MAX_REACTIONS_PER_MESSAGE, can, canMentionEveryone, editMessage
 import { prisma } from '../lib/db';
 import { badRequest, forbidden, notFound } from '../lib/errors';
 import { toMessageDTO, toReactionDTOs } from '../lib/serializers';
+import { getGif } from '../lib/giphy';
 import { assertNotTimedOut, hitMessageLimit, hitReactionLimit } from '../lib/spam';
 import { randomUUID } from 'node:crypto';
 import { copyObject, deleteKeys, getObjectBuffer, headObject, putObject } from '../lib/storage';
@@ -110,10 +111,11 @@ export async function messageRoutes(app: FastifyInstance) {
 
     // Everything below is independent, so run it in parallel (each step is a
     // network round trip to the database or storage).
-    const [uploads, stickerAtt, resolved] = await Promise.all([
+    const [uploads, stickerAtt, resolved, gif] = await Promise.all([
       validateUploads(body.attachmentIds, req.auth.userId, session.id),
       body.stickerId ? copyStickerIntoSession(body.stickerId, req.auth.userId, session.id) : Promise.resolve(null),
       resolveMentions(body.content, session.id, member.role, session),
+      body.gifId ? getGif(body.gifId, session.gifRating) : Promise.resolve(null),
       body.replyToId
         ? prisma.message.findUnique({ where: { id: body.replyToId }, select: { channelId: true } }).then((r) => {
             if (r?.channelId !== id) throw badRequest('Invalid reply');
@@ -131,6 +133,7 @@ export async function messageRoutes(app: FastifyInstance) {
         mentions: resolved.mentions,
         mentionsEveryone: resolved.mentionsEveryone,
         replyToId: body.replyToId,
+        ...(gif ? { gif: { ...gif } } : {}),
       },
     });
     if (attachments.length) {

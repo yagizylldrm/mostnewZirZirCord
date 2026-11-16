@@ -15,6 +15,7 @@ export type SessionAction =
   | 'session.kick'
   | 'session.ban'
   | 'session.timeout'
+  | 'session.gifRating'
   | 'channel.kick'
   | 'channel.ban'
   | 'channel.manage'
@@ -28,6 +29,7 @@ const OWNER_ONLY: SessionAction[] = [
   'session.delete',
   'session.transferOwnership',
   'session.manageMods',
+  'session.gifRating',
 ];
 
 export function can(role: Role | null | undefined, action: SessionAction): boolean {

@@ -1,5 +1,5 @@
 import { QUICK_REACTIONS, can, formatPlainText, isJumboEmoji } from '@zirzircord/shared';
-import { type LocalMessage, memberName, mentionsToText } from '@zirzircord/client-core';
+import { type LocalMessage, memberName, mentionsToText, mediaLabel } from '@zirzircord/client-core';
 import type { MessageDTO } from '@zirzircord/shared';
 import { Clock, Hash, Pencil, Reply, SmilePlus, Trash2, Users } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -8,6 +8,7 @@ import { ui, useApp, zz } from '../lib/zz';
 import { AttachmentView } from './Attachments';
 import { Composer } from './Composer';
 import { EmojiPicker } from './EmojiPicker';
+import { GifView } from './GifView';
 import { FormattedText } from './FormattedText';
 import { Avatar, IconButton, cx } from './ui';
 
@@ -243,7 +244,7 @@ function MessageRow(p: {
           <div className="mb-0.5 flex items-center gap-1.5 truncate text-xs text-muted">
             <Reply size={12} className="shrink-0 -scale-x-100" />
             <span className="font-semibold">{p.replyTo ? memberName(view, p.replyTo.authorId) : 'Unknown'}</span>
-            <span className="truncate">{p.replyTo ? formatPlainText(p.replyTo.content) || '📎 Attachment' : 'Original message not loaded'}</span>
+            <span className="truncate">{p.replyTo ? formatPlainText(p.replyTo.content) || mediaLabel(p.replyTo) : 'Original message not loaded'}</span>
           </div>
         )}
         {!p.grouped && (
@@ -281,6 +282,7 @@ function MessageRow(p: {
             </div>
           )
         )}
+        {p.m.gif && <GifView gif={p.m.gif} />}
         {p.m.attachments.length > 0 && (
           <div className="mt-1 flex flex-col items-start gap-2">
             {p.m.attachments.map((a) => (

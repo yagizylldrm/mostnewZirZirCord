@@ -1,4 +1,4 @@
-import type { AttachmentKind, AudioPreset, ChannelType, NotifyLevel, Role, SessionState, UserStatus } from './constants';
+import type { AttachmentKind, AudioPreset, ChannelType, GifRating, NotifyLevel, Role, SessionState, UserStatus } from './constants';
 
 /** What everyone else can see about a user. Never contains email or IP. */
 export interface PublicUser {
@@ -54,6 +54,8 @@ export interface SessionDTO extends SessionSettings {
   iconStaticUrl: string | null;
   /** Set when a set session went to sleep after SLEEP.afterDays without activity (ISO). */
   sleepingSince: string | null;
+  /** Highest GIPHY rating allowed in this session (owner's choice). */
+  gifRating: GifRating;
 }
 
 export interface MemberDTO {
@@ -119,8 +121,29 @@ export interface MessageDTO {
   attachments: AttachmentDTO[];
   /** In order of first use. A null user id = a reaction from a deleted account (never stored that way; kept for type safety). */
   reactions: ReactionDTO[];
+  /** A GIPHY GIF (hotlinked from GIPHY's servers). */
+  gif: GifDTO | null;
   createdAt: string;
   editedAt: string | null;
+}
+
+export interface GifDTO {
+  id: string;
+  title: string;
+  /** Animated GIF (plays everywhere). */
+  url: string;
+  /** Same GIF as a much smaller MP4 (web plays it as a muted loop). */
+  mp4Url: string | null;
+  /** Small animated preview for pickers. */
+  previewUrl: string;
+  width: number;
+  height: number;
+}
+
+export interface GifPage {
+  gifs: GifDTO[];
+  /** Pass as `offset` to load more; null at the end. */
+  nextOffset: number | null;
 }
 
 export interface ReactionDTO {

@@ -41,6 +41,17 @@ export const SPAM = {
 export const TIMEOUT_MINUTES = [1, 5, 10, 60, 1440, 10080] as const;
 
 export const MAX_REACTIONS_PER_MESSAGE = 20;
+
+/** GIFs (GIPHY). The session owner picks the highest rating allowed in their session. */
+export const GIF_PAGE_SIZE = 24;
+export const GIF_RATINGS = ['G', 'PG', 'PG13', 'R'] as const;
+export type GifRating = (typeof GIF_RATINGS)[number];
+export const GIF_RATING_INFO: Record<GifRating, { label: string; giphy: 'g' | 'pg' | 'pg-13' | 'r'; desc: string }> = {
+  G: { label: 'G', giphy: 'g', desc: 'Safe for everyone.' },
+  PG: { label: 'PG', giphy: 'pg', desc: 'Mild content, like a family film.' },
+  PG13: { label: 'PG-13', giphy: 'pg-13', desc: 'Mild language and innuendo, no nudity.' },
+  R: { label: 'R', giphy: 'r', desc: 'Strong language and adult themes. No nudity (GIPHY never allows it).' },
+};
 /** Quick picks shown next to the full emoji picker. */
 export const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👀'] as const;
 

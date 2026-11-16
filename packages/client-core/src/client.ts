@@ -8,6 +8,7 @@ import type {
   ServerToClientEvents,
   SessionSnapshot,
   UpdateProfileInput,
+  GifDTO,
 } from '@zirzircord/shared';
 import { ApiClient, ApiError, type MediaPurpose, putWithProgress } from './api';
 import { SLEEP, formatPlainText } from '@zirzircord/shared';
@@ -23,6 +24,7 @@ import {
   type LocalMessage,
   type SessionView,
   sortChannels,
+  mediaLabel,
 } from './store';
 
 export interface OutgoingFile {
@@ -560,11 +562,11 @@ export class ZirZirClient {
     const author = m.authorId ? view.members[m.authorId] : undefined;
     const text = m.content
       ? formatPlainText(mentionsToText(m.content, view))
-      : m.attachments[0]?.kind === 'STICKER'
-        ? 'sent a sticker'
-        : m.attachments[0]?.kind === 'VOICE_MESSAGE'
-          ? '🎙️ Voice message'
-          : '📎 Attachment';
+      : m.gif
+        ? 'sent a GIF'
+        : m.attachments[0]?.kind === 'STICKER'
+          ? 'sent a sticker'
+          : mediaLabel(m);
     this.onNotify({
       sessionId,
       channelId: m.channelId,
@@ -708,6 +710,7 @@ export class ZirZirClient {
       mentionsEveryone: false,
       attachments: [],
       reactions: [],
+      gif: null,
       createdAt: new Date().toISOString(),
       editedAt: null,
       pending: true,
@@ -857,6 +860,13 @@ export class ZirZirClient {
     this.set((s) => ({ stickers: [sticker, ...(s.stickers ?? [])] }));
     return sticker;
   }
+  /** Sends a GIPHY GIF (shown at once; the server looks the GIF up by id). */
+  async sendGif(channelId: string, gif: GifDTO) {
+    const nonce = randomId();
+    this.showPending(channelId, nonce, '', { gif });
+    return this.sendOptimistic(channelId, nonce, () => this.api.sendMessage(channelId, { gifId: gif.id, nonce }));
+  }
+
   async sendSticker(sessionId: string, channelId: string, stickerId: string) {
     const nonce = randomId();
     const st = this.state.stickers?.find((x) => x.id === stickerId);

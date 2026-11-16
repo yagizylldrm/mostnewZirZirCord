@@ -67,3 +67,10 @@ export async function hitReactionLimit(userId: string) {
     throw tooMany('You are reacting too fast', 'rate_limited');
   }
 }
+
+/** GIF searches: each cache miss costs GIPHY quota, so 30 per minute per user. */
+export async function hitGifSearchLimit(userId: string) {
+  if (await overLimit(`spam:gif:${userId}`, 30, 60_000)) {
+    throw tooMany('Too many GIF searches. Wait a moment.', 'rate_limited');
+  }
+}

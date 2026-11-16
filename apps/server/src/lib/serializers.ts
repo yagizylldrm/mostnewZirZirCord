@@ -1,6 +1,6 @@
 import type { Attachment, Channel, Message, Reaction, Session, SessionMember, Sticker, User } from '@prisma/client';
 import { createHash } from 'node:crypto';
-import type { AttachmentDTO, ChannelDTO, MemberDTO, MessageDTO, PublicUser, ReactionDTO, SelfUser, SessionDTO, StickerDTO } from '@zirzircord/shared';
+import type { AttachmentDTO, ChannelDTO, GifDTO, MemberDTO, MessageDTO, PublicUser, ReactionDTO, SelfUser, SessionDTO, StickerDTO } from '@zirzircord/shared';
 import { env } from '../env';
 import { presignGet } from './storage';
 
@@ -57,6 +57,7 @@ export function toSessionDTO(s: Session): SessionDTO {
     iconUrl: keyedUrl(`sessions/${s.id}/icon`, s.iconKey),
     iconStaticUrl: keyedUrl(`sessions/${s.id}/icon`, s.iconStaticKey ?? s.iconKey, !!s.iconStaticKey),
     sleepingSince: s.sleepingSince?.toISOString() ?? null,
+    gifRating: s.gifRating,
   };
 }
 
@@ -124,6 +125,7 @@ export async function toMessageDTO(m: Message & { attachments: Attachment[]; rea
       [...m.attachments].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map(toAttachmentDTO),
     ),
     reactions: toReactionDTOs(m.reactions ?? []),
+    gif: (m.gif as GifDTO | null) ?? null,
     createdAt: m.createdAt.toISOString(),
     editedAt: m.editedAt?.toISOString() ?? null,
   };
