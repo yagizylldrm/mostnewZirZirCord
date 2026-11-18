@@ -16,6 +16,9 @@ export async function startServer() {
   return { app, base };
 }
 
+/** Test names are short and casual; the server wants 6+ characters and no spaces. */
+export const validName = (name: string) => name.replace(/\s+/g, '_').padEnd(6, '_');
+
 export class Client {
   token = '';
   refreshToken = '';
@@ -50,14 +53,14 @@ export class Client {
   }
 
   async guest(name: string) {
-    const r = await this.req('POST', '/auth/guest', { displayName: name, deviceId: this.deviceId });
+    const r = await this.req('POST', '/auth/guest', { displayName: validName(name), deviceId: this.deviceId });
     this.setAuth(r.body);
     return this;
   }
 
   async register(name: string) {
     const r = await this.req('POST', '/auth/register', {
-      displayName: name,
+      displayName: validName(name),
       email: `${randomUUID()}@test.local`,
       password: 'password123',
       deviceId: this.deviceId,

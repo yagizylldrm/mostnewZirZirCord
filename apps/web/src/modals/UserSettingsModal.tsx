@@ -1,4 +1,4 @@
-import { PROFILE_IMAGE_MAX_BYTES, STATUSES, type UserStatus } from '@zirzircord/shared';
+import { PROFILE_IMAGE_MAX_BYTES, STATUSES, type UserStatus, nameProblem } from '@zirzircord/shared';
 import { Copy } from 'lucide-react';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { SOUND_GROUPS, type SoundGroup } from '@zirzircord/client-core';
@@ -59,6 +59,9 @@ function Profile() {
   const [busy, setBusy] = useState<'avatar' | 'banner' | null>(null);
   const save = async (e: FormEvent) => {
     e.preventDefault();
+    // A new name follows the naming rules; an older, shorter one can stay.
+    const problem = name.trim() !== me.displayName ? nameProblem(name) : null;
+    if (problem) return zz.notify(problem, 'error');
     if (await zz.attempt(() => zz.updateProfile({ displayName: name.trim(), bio, bannerColor: color, status }))) zz.notify('Profile saved', 'success');
   };
   const upload = async (kind: 'avatar' | 'banner', f: File | undefined) => {
@@ -117,7 +120,7 @@ function Profile() {
         <input ref={fileRef} type="file" accept={accept} hidden onChange={(e) => (upload('avatar', e.target.files?.[0]), (e.target.value = ''))} />
         <input ref={bannerRef} type="file" accept={accept} hidden onChange={(e) => (upload('banner', e.target.files?.[0]), (e.target.value = ''))} />
       </div>
-      <Field label="Display name">
+      <Field label="Display name" hint="At least 6 characters, no spaces.">
         <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} maxLength={32} required />
       </Field>
       <Field label="About me">

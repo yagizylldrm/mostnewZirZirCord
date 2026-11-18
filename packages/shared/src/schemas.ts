@@ -1,17 +1,23 @@
 import { z } from 'zod';
+import { nameProblem } from './names';
 import { ATTACHMENT_KINDS, AUDIO_PRESETS, LIMITS, NOTIFY_LEVELS, PROFILE_IMAGE_MAX_BYTES, PROFILE_IMAGE_MIMES, GIF_RATINGS, STATUSES, TIMEOUT_MINUTES } from './constants';
 
 const name = (max: number) => z.string().trim().min(1).max(max);
+/** A name people call themselves: at least 6 characters, no spaces or invisible characters. */
+const personName = (max: number) => z.string().trim().max(max).superRefine((v, ctx) => {
+  const problem = nameProblem(v);
+  if (problem) ctx.addIssue({ code: 'custom', message: problem });
+});
 
 export const deviceIdSchema = z.string().min(8).max(128);
 
 export const guestAuthSchema = z.object({
-  displayName: name(LIMITS.displayName),
+  displayName: personName(LIMITS.displayName),
   deviceId: deviceIdSchema,
 });
 
 export const registerSchema = z.object({
-  displayName: name(LIMITS.displayName),
+  displayName: personName(LIMITS.displayName),
   email: z.email().max(254),
   password: z.string().min(8).max(200),
   deviceId: deviceIdSchema,

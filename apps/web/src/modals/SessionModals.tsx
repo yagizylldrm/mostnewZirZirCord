@@ -1,4 +1,4 @@
-import { formatSessionCode, normalizeSessionCode, SET_SESSION_EXPIRY_NOTE } from '@zirzircord/shared';
+import { formatSessionCode, nameProblem, normalizeSessionCode, SET_SESSION_EXPIRY_NOTE } from '@zirzircord/shared';
 import { type FormEvent, useState } from 'react';
 import { Button, Field, Modal, ToggleRow, inputCls } from '../components/ui';
 import { closeModal, useApp, zz } from '../lib/zz';
@@ -90,12 +90,16 @@ export function NicknameModal() {
   if (!view) return null;
   const save = async (e: FormEvent) => {
     e.preventDefault();
-    if ((await zz.attempt(() => zz.api.setNickname(view.session.id, nick.trim() || null))) !== undefined) closeModal();
+    const next = nick.trim();
+    // Clearing is always fine; a new nickname follows the naming rules (an older one can stay).
+    const problem = next && next !== view.members[me.id]?.nickname ? nameProblem(next) : null;
+    if (problem) return zz.notify(problem, 'error');
+    if ((await zz.attempt(() => zz.api.setNickname(view.session.id, next || null))) !== undefined) closeModal();
   };
   return (
     <Modal title={`Nickname in ${view.session.name}`} onClose={closeModal}>
       <form onSubmit={save} className="space-y-4">
-        <Field label="Nickname" hint="Only shown in this session. Leave empty to use your display name.">
+        <Field label="Nickname" hint="Only shown in this session. At least 6 characters, no spaces. Leave empty to use your display name.">
           <input className={inputCls} value={nick} onChange={(e) => setNick(e.target.value)} maxLength={32} placeholder={me.displayName} autoFocus />
         </Field>
         <Button className="w-full">Save</Button>

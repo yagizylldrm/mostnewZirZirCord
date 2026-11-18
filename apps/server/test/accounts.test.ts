@@ -5,7 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { prisma } from '../src/lib/db';
 import { headObject, putObject } from '../src/lib/storage';
 import { cleanupOfflineGuests } from '../src/users/deletion';
-import { Client, sleep, startServer } from './helpers';
+import { Client, sleep, startServer, validName } from './helpers';
 
 let app: FastifyInstance;
 let base: string;
@@ -28,7 +28,7 @@ afterAll(async () => {
 async function registered(name: string) {
   const c = mk();
   const email = `${randomUUID()}@test.local`;
-  const r = await c.req('POST', '/auth/register', { displayName: name, email, password: 'password123', deviceId: c.deviceId });
+  const r = await c.req('POST', '/auth/register', { displayName: validName(name), email, password: 'password123', deviceId: c.deviceId });
   Object.assign(c, { token: r.body.accessToken, refreshToken: r.body.refreshToken, userId: r.body.user.id, publicId: r.body.user.publicId });
   return Object.assign(c, { email });
 }
@@ -106,7 +106,7 @@ describe('guest accounts', () => {
   it('guest creation is limited per IP', async () => {
     const c = mk();
     const codes: number[] = [];
-    for (let i = 0; i < 11; i++) codes.push((await c.req('POST', '/auth/guest', { displayName: `g${i}`, deviceId: `d-${randomUUID()}` })).status);
+    for (let i = 0; i < 11; i++) codes.push((await c.req('POST', '/auth/guest', { displayName: validName(`g${i}`), deviceId: `d-${randomUUID()}` })).status);
     expect(codes.slice(0, 10).every((x) => x === 200)).toBe(true);
     expect(codes[10]).toBe(429);
   });
