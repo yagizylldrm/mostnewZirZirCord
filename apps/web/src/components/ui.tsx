@@ -225,14 +225,28 @@ export interface ContextMenuItem {
 }
 
 /** A right-click menu at the pointer, kept inside the window; closes on Esc, outside click, scroll or resize. */
-export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; items: ContextMenuItem[]; onClose: () => void }) {
+export function ContextMenu({
+  x,
+  y,
+  items,
+  quick,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  /** Groups of items; a divider is drawn between groups (empty groups are skipped). */
+  items: ContextMenuItem[][];
+  /** A row of one-tap emoji across the top. */
+  quick?: { emojis: readonly string[]; onPick: (emoji: string) => void };
+  onClose: () => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y });
   useLayoutEffect(() => {
     const r = ref.current?.getBoundingClientRect();
     if (!r) return;
     setPos({ left: Math.max(4, Math.min(x, window.innerWidth - r.width - 4)), top: Math.max(4, Math.min(y, window.innerHeight - r.height - 4)) });
-  }, [x, y]);
+  }, [x, y, items.length]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -251,21 +265,45 @@ export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; it
       <div
         ref={ref}
         role="menu"
-        className="absolute w-52 rounded-lg border border-line bg-elev p-1.5 text-sm shadow-xl"
+        className="absolute w-56 rounded-lg border border-line bg-elev p-1.5 text-sm shadow-xl"
         style={pos}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {items.map((it) => (
-          <button
-            key={it.label}
-            role="menuitem"
-            onClick={() => (onClose(), it.onSelect())}
-            className={cx('flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left', it.danger ? 'text-danger hover:bg-danger hover:text-white' : 'hover:bg-hover')}
-          >
-            {it.label}
-            {it.icon}
-          </button>
-        ))}
+        {quick && (
+          <div className="mb-1 flex justify-between gap-1 border-b border-line pb-1.5">
+            {quick.emojis.map((e) => (
+              <button
+                key={e}
+                aria-label={`React with ${e}`}
+                title={`React with ${e}`}
+                onClick={() => (onClose(), quick.onPick(e))}
+                className="grid size-9 place-items-center rounded-md bg-side text-lg hover:bg-hover"
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        )}
+        {items
+          .filter((g) => g.length)
+          .map((group, gi) => (
+            <div key={gi} className={cx(gi > 0 && 'mt-1 border-t border-line pt-1')}>
+              {group.map((it) => (
+                <button
+                  key={it.label}
+                  role="menuitem"
+                  onClick={() => (onClose(), it.onSelect())}
+                  className={cx(
+                    'flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left',
+                    it.danger ? 'text-danger hover:bg-danger hover:text-white' : 'hover:bg-hover',
+                  )}
+                >
+                  {it.label}
+                  {it.icon}
+                </button>
+              ))}
+            </div>
+          ))}
       </div>
     </div>
   );

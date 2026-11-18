@@ -120,6 +120,24 @@ function MessageList({ sessionId, channelId, onReply }: { sessionId: string; cha
 
   const canDeleteAny = can(view?.myRole, 'message.deleteAny');
 
+  // Click a reply's quote: scroll to the original (loading older history if it isn't on screen yet) and flash it.
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const jumpTo = async (id: string) => {
+    for (let i = 0; i < 20; i++) {
+      const el = scroller.current?.querySelector(`[data-mid="${id}"]`);
+      if (el) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        setFlashId(id);
+        setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 1800);
+        return;
+      }
+      if (!zz.state.messages[channelId]?.hasMore) break;
+      await zz.loadOlder(channelId).catch(() => {});
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+    }
+    zz.notify('That message is too far back to find', 'info');
+  };
+
   return (
     <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
       <div className="flex min-h-full flex-col justify-end pb-4">
@@ -159,6 +177,8 @@ function MessageList({ sessionId, channelId, onReply }: { sessionId: string; cha
                 canDelete={m.authorId === meId || canDeleteAny}
                 canEdit={m.authorId === meId}
                 onReply={() => onReply(m)}
+                onJump={m.replyToId ? () => void jumpTo(m.replyToId!) : undefined}
+                flash={flashId === m.id}
               />
             </Fragment>
           );
@@ -176,6 +196,8 @@ function MessageRow(p: {
   canDelete: boolean;
   canEdit: boolean;
   onReply: () => void;
+  onJump?: () => void;
+  flash?: boolean;
 }) {
   const view = useApp((s) => s.sessions[p.sessionId]);
   const [editing, setEditing] = useState(false);
@@ -224,20 +246,18 @@ function MessageRow(p: {
 
   const [menu, setMenu] = useState<null | { x: number; y: number }>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
-  const menuItems: ContextMenuItem[] = [
-    ...(canReact ? [{ label: 'Add reaction', icon: <SmilePlus size={14} />, onSelect: openPicker }] : []),
-    { label: 'Reply', icon: <Reply size={14} />, onSelect: p.onReply },
-    ...(p.m.content
-      ? [
-          {
-            label: 'Copy message',
-            icon: <Copy size={14} />,
-            onSelect: () => void navigator.clipboard?.writeText(tokensToNames(p.m.content, view)).then(() => zz.notify('Copied', 'success'), () => zz.notify('Could not copy', 'error')),
-          },
-        ]
-      : []),
-    ...(p.canEdit && p.m.content ? [{ label: 'Edit message', icon: <Pencil size={14} />, onSelect: () => (setDraft(tokensToNames(p.m.content, view)), setEditing(true)) }] : []),
-    ...(p.canDelete ? [{ label: 'Delete message', icon: <Trash2 size={14} />, danger: true, onSelect: () => confirm('Delete this message?') && zz.attempt(() => zz.api.deleteMessage(p.m.id)) }] : []),
+  const text = p.m.content ? tokensToNames(p.m.content, view) : '';
+  const menuItems: ContextMenuItem[][] = [
+    [
+      ...(canReact ? [{ label: 'Add reaction…', icon: <SmilePlus size={14} />, onSelect: openPicker }] : []),
+      { label: 'Reply', icon: <Reply size={14} />, onSelect: p.onReply },
+      ...(p.canEdit && p.m.content ? [{ label: 'Edit message', icon: <Pencil size={14} />, onSelect: () => (setDraft(text), setEditing(true)) }] : []),
+    ],
+    [
+      ...(text ? [{ label: 'Copy text', icon: <Copy size={14} />, onSelect: () => void navigator.clipboard?.writeText(text).then(() => zz.notify('Copied', 'success'), () => zz.notify('Could not copy', 'error')) }] : []),
+      { label: 'Copy message ID', icon: <Hash size={14} />, onSelect: () => void navigator.clipboard?.writeText(p.m.id).then(() => zz.notify('Copied', 'success'), () => {}) },
+    ],
+    p.canDelete ? [{ label: 'Delete message', icon: <Trash2 size={14} />, danger: true, onSelect: () => confirm('Delete this message?') && zz.attempt(() => zz.api.deleteMessage(p.m.id)) }] : [],
   ];
   // Keep the browser's own menu for links, images and video (open / save), and while editing.
   const onContextMenu = (e: React.MouseEvent) => {
@@ -249,9 +269,11 @@ function MessageRow(p: {
   return (
     <div
       ref={rowRef}
+      data-mid={p.m.id}
       onContextMenu={onContextMenu}
       className={cx(
-        'group relative flex gap-4 px-4 hover:bg-black/10',
+        'group relative flex gap-4 px-4 transition-colors duration-700 hover:bg-black/10',
+        p.flash && 'bg-brand/25',
         p.grouped ? 'py-0.5' : 'mt-3 pt-1 pb-0.5',
         mentionsMe && 'border-l-2 border-brand bg-brand/[0.07] hover:bg-brand/10',
         p.m.pending && !p.m.failed && 'opacity-60',
@@ -266,11 +288,11 @@ function MessageRow(p: {
       </div>
       <div className="min-w-0 flex-1">
         {p.m.replyToId && (
-          <div className="mb-0.5 flex items-center gap-1.5 truncate text-xs text-muted">
+          <button type="button" onClick={p.onJump} title="Jump to the original message" className="mb-0.5 flex max-w-full items-center gap-1.5 truncate text-left text-xs text-muted hover:text-fg">
             <Reply size={12} className="shrink-0 -scale-x-100" />
             <span className="font-semibold">{p.replyTo ? memberName(view, p.replyTo.authorId) : 'Unknown'}</span>
             <span className="truncate">{p.replyTo ? formatPlainText(p.replyTo.content) || mediaLabel(p.replyTo) : 'Original message not loaded'}</span>
-          </div>
+          </button>
         )}
         {!p.grouped && (
           <div className="flex items-baseline gap-2">
@@ -380,7 +402,7 @@ function MessageRow(p: {
           </IconButton>
         )}
       </div>
-      {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={closeMenu} />}
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} quick={canReact ? { emojis: QUICK_REACTIONS.slice(0, 4), onPick: react } : undefined} onClose={closeMenu} />}
     </div>
   );
 }
