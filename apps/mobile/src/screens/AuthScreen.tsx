@@ -1,3 +1,4 @@
+import { nameProblem } from '@zirzircord/shared';
 import { Image } from 'expo-image';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
@@ -21,6 +22,8 @@ export function AuthScreen() {
   const { adding, current } = useApp((st) => ({ adding: st.addingAccount && !!st.me, current: st.me?.displayName }));
 
   const submit = async () => {
+    const problem = tab === 'login' ? null : nameProblem(name);
+    if (problem) return setError(problem);
     setBusy(true);
     setError('');
     try {
@@ -56,7 +59,7 @@ export function AuthScreen() {
               </Pressable>
             ))}
           </View>
-          {tab !== 'login' && <TextInput style={s.input} placeholder="Display name" placeholderTextColor={C.faint} value={name} onChangeText={setName} maxLength={32} />}
+          {tab !== 'login' && <TextInput style={s.input} placeholder="Display name (6+ characters, no spaces)" placeholderTextColor={C.faint} value={name} onChangeText={setName} maxLength={32} />}
           {tab !== 'guest' && (
             <>
               <TextInput style={s.input} placeholder="Email (never shown to anyone)" placeholderTextColor={C.faint} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import argon2 from 'argon2';
-import { PROFILE_IMAGE_MAX_BYTES, deleteAccountSchema, mediaUploadSchema, updateProfileSchema } from '@zirzircord/shared';
+import { PROFILE_IMAGE_MAX_BYTES, deleteAccountSchema, mediaUploadSchema, nameProblem, updateProfileSchema } from '@zirzircord/shared';
 import { prisma } from '../lib/db';
 import { badRequest, forbidden, notFound } from '../lib/errors';
 import { processImage, type MediaKind } from '../lib/media';
@@ -52,6 +52,9 @@ export async function userRoutes(app: FastifyInstance) {
   app.patch('/me', { preHandler: app.authenticate }, async (req) => {
     const body = updateProfileSchema.parse(req.body);
     const current = await prisma.user.findUniqueOrThrow({ where: { id: req.auth.userId } });
+    // New names follow the naming rules; an older, shorter name can stay as it is.
+    const nameError = body.displayName !== undefined && body.displayName !== current.displayName ? nameProblem(body.displayName) : null;
+    if (nameError) throw badRequest(nameError, 'invalid_name');
     const data: Record<string, unknown> = {
       displayName: body.displayName,
       bio: body.bio,
