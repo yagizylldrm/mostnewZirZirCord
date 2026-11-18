@@ -33,6 +33,10 @@ export interface CallParticipant {
   screenHasAudio: boolean;
   /** I muted their screen share's sound (only for me; their voice is unaffected). */
   screenAudioMuted: boolean;
+  /** How loud I play their screen share's sound (0..MAX_USER_VOLUME), separate from their voice. */
+  screenVolume: number;
+  /** I muted this person's voice (only for me), keeping their volume setting. */
+  userMuted: boolean;
 }
 
 export interface CallState {
@@ -149,6 +153,9 @@ export class CallManager {
   private audioEls = new Map<string, HTMLMediaElement[]>();
   /** Identities whose screen-share sound I muted (this call only). */
   private screenMuted = new Set<string>();
+  private screenVolumes = new Map<string, number>();
+  /** Identities whose voice I muted (this call only). */
+  private userMuted = new Set<string>();
 
   constructor(
     private api: ApiClient,
@@ -178,6 +185,7 @@ export class CallManager {
         outputDeviceId: p.outputDeviceId ?? null,
       });
       for (const [k, v] of Object.entries(p.volumes ?? {})) this.volumes.set(k, v as number);
+      for (const [k, v] of Object.entries(p.screenVolumes ?? {})) this.screenVolumes.set(k, v as number);
     } catch {}
   }
   private savePrefs() {
@@ -192,6 +200,7 @@ export class CallManager {
           inputDeviceId: s.inputDeviceId,
           outputDeviceId: s.outputDeviceId,
           volumes: Object.fromEntries(this.volumes),
+          screenVolumes: Object.fromEntries(this.screenVolumes),
         }),
       )
       .catch(() => {});
@@ -301,6 +310,7 @@ export class CallManager {
     for (const els of this.audioEls.values()) els.forEach((el) => el.remove());
     this.audioEls.clear();
     this.screenMuted.clear();
+    this.userMuted.clear();
     this.set({
       status: 'idle',
       sessionId: null,
@@ -378,14 +388,14 @@ export class CallManager {
       });
   }
 
-  /** Volume for someone's voice: their user volume, or 0 while deafened. */
+  /** Volume for someone's voice: their user volume, or 0 while deafened or muted by me. */
   private voiceVolume(identity: string) {
-    return this.state.deafened ? 0 : playableVolume(this.volumes.get(identity) ?? 1);
+    return this.state.deafened || this.userMuted.has(identity) ? 0 : playableVolume(this.volumes.get(identity) ?? 1);
   }
 
-  /** Screen-share sound follows the user volume, unless I muted that stream. */
+  /** Screen-share sound has its own volume; 0 while deafened or when I muted that stream. */
   private screenVolume(identity: string) {
-    return this.screenMuted.has(identity) ? 0 : this.voiceVolume(identity);
+    return this.state.deafened || this.screenMuted.has(identity) ? 0 : playableVolume(this.screenVolumes.get(identity) ?? 1);
   }
 
   private applyVolumes(p: RemoteParticipant) {
@@ -399,6 +409,24 @@ export class CallManager {
     else this.screenMuted.delete(identity);
     const p = this.room?.remoteParticipants.get(identity);
     if (p) p.setVolume(this.screenVolume(identity), Track.Source.ScreenShareAudio);
+    this.refresh();
+  }
+
+  /** Sets how loud someone's screen-share sound plays for me (kept between calls). */
+  setScreenVolume(identity: string, requested: number) {
+    this.screenVolumes.set(identity, playableVolume(requested));
+    this.savePrefs();
+    const p = this.room?.remoteParticipants.get(identity);
+    if (p) p.setVolume(this.screenVolume(identity), Track.Source.ScreenShareAudio);
+    this.refresh();
+  }
+
+  /** Mutes / unmutes someone's voice for me only; their volume setting is kept. */
+  setUserMuted(identity: string, muted: boolean) {
+    if (muted) this.userMuted.add(identity);
+    else this.userMuted.delete(identity);
+    const p = this.room?.remoteParticipants.get(identity);
+    if (p) this.applyVolumes(p);
     this.refresh();
   }
 
@@ -455,6 +483,8 @@ export class CallManager {
       serverMuted: !micAllowed(p),
       screenHasAudio: !!p.getTrackPublication(Track.Source.ScreenShareAudio),
       screenAudioMuted: this.screenMuted.has(p.identity),
+      screenVolume: playableVolume(this.screenVolumes.get(p.identity) ?? 1),
+      userMuted: this.userMuted.has(p.identity),
     }));
     this.set({ participants });
   }
