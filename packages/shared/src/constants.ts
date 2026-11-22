@@ -57,6 +57,11 @@ export const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'
 
 /** Header every official client sends (`<platform>/<version>`). */
 export const CLIENT_HEADER = 'x-zz-client';
+
+/** The one production API. Release builds of every client fall back to it; dev builds use localhost. */
+export const PRODUCTION_API_URL = 'https://api.yagizylldrm.dev';
+/** Local API for development builds only (never a fallback in a release build). */
+export const DEV_API_URL = 'http://localhost:4000';
 export const CLIENT_PLATFORMS = ['web', 'desktop', 'tauri', 'mobile'] as const;
 export type ClientPlatform = (typeof CLIENT_PLATFORMS)[number];
 

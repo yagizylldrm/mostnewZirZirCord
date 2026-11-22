@@ -1,5 +1,5 @@
 import { type AppState, CallManager, type CallState, type SoundEvent, ZirZirClient, webStorage } from '@zirzircord/client-core';
-import { type Bindings, parseBindings } from '@zirzircord/shared';
+import { type Bindings, DEV_API_URL, PRODUCTION_API_URL, parseBindings } from '@zirzircord/shared';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { createStore } from 'zustand/vanilla';
@@ -10,9 +10,10 @@ function resolveApiUrl(): string {
   const fromEnv = import.meta.env.VITE_API_URL as string | undefined;
   if (fromEnv) return fromEnv;
   if (desktop?.apiUrl) return desktop.apiUrl;
-  if (desktop || location.protocol === 'file:' || !location.hostname) return 'http://localhost:4000';
-  // Dev: API runs next to the web server on port 4000. Production: same origin under /api is
-  // handled by the reverse proxy (see infra/Caddyfile) — set VITE_API_URL for that build.
+  // Release builds (website, Tauri, Electron) never fall back to localhost.
+  if (import.meta.env.PROD) return PRODUCTION_API_URL;
+  if (desktop || location.protocol === 'file:' || !location.hostname) return DEV_API_URL;
+  // Dev: the API runs next to the web dev server on port 4000.
   return `${location.protocol}//${location.hostname}:4000`;
 }
 

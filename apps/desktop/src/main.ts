@@ -14,7 +14,7 @@ import {
 import path from 'node:path';
 
 const DEV_URL = process.env.ZZ_DEV_URL;
-const API_URL = process.env.ZZ_API_URL ?? 'http://localhost:4000';
+const API_URL = process.env.ZZ_API_URL ?? (app.isPackaged ? 'https://api.yagizylldrm.dev' : 'http://localhost:4000');
 const SMOKE = process.env.ZZ_SMOKE === '1';
 const PROTOCOL = 'zirzircord';
 
