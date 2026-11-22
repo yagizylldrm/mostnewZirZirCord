@@ -214,6 +214,12 @@ export class CallManager {
 
   async join(sessionId: string, channelId: string) {
     if (this.state.channelId === channelId && this.state.status !== 'idle') return;
+    // The Linux desktop app's WebKitGTK is built without WebRTC. Say so up front: otherwise
+    // the join can sit on "Connecting…" forever (seen with the .deb on Arch).
+    if (typeof RTCPeerConnection === 'undefined') {
+      this.error('Voice calls are not supported in the Linux desktop app yet. Text chat still works.');
+      return;
+    }
     await this.leave();
     this.set({ status: 'connecting', sessionId, channelId, screenSharing: false, cameraEnabled: false });
     try {
