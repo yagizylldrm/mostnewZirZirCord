@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=ZirZirCord
+Comment=Chat with friends
+Exec=zirzircord-desktop %u
+Icon=app.zirzircord.desktop
+Terminal=false
+Categories=Network;InstantMessaging;Chat;
+MimeType=x-scheme-handler/zirzircord;
+StartupWMClass=zirzircord-desktop

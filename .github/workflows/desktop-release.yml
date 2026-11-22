@@ -6,12 +6,18 @@ on:
   push:
     tags: ['desktop-v*']
   workflow_dispatch:
+    inputs:
+      flatpak_only:
+        description: 'Only rebuild the Flatpak from the existing draft release .deb'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 jobs:
   build:
+    if: ${{ !inputs.flatpak_only }}
     strategy:
       fail-fast: false
       matrix:
@@ -41,7 +47,9 @@ jobs:
         if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev rpm \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav
 
       - run: npm ci
 
@@ -52,11 +60,84 @@ jobs:
           VITE_API_URL: ${{ vars.VITE_API_URL }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # linuxdeploy's bundled strip can't handle newer ELF sections and breaks the AppImage.
+          NO_STRIP: 'true'
         with:
           projectPath: apps/desktop-tauri
           tagName: desktop-v__VERSION__
           releaseName: 'ZirZirCord Desktop v__VERSION__'
-          releaseBody: 'Unsigned builds: on macOS right-click the app and choose Open the first time; on Windows choose "More info" then "Run anyway". Linux voice calls are experimental.'
+          releaseBody: 'Unsigned builds: on macOS right-click the app and choose Open the first time; on Windows choose "More info" then "Run anyway". Linux: use the .deb (Ubuntu/Debian), .rpm (Fedora/openSUSE), .flatpak (any distro; it does not auto-update, the app tells you when a new version is out: download the new ZirZirCord.flatpak and run `flatpak install --user --reinstall ZirZirCord.flatpak`) or the AppImage (chmod +x; on Ubuntu 24.04+ it needs `sudo apt install libfuse2t64`, on Arch `sudo pacman -S fuse2`). Linux: text chat only, voice calls are not supported yet.'
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  # Repackages the Linux .deb from the draft release as a Flatpak bundle and attaches it.
+  # Split in three: flatpak-builder only exists in the Flathub container, which has no `gh`.
+  flatpak-prep:
+    needs: build
+    # Also runs when `build` was skipped via the flatpak_only input.
+    if: ${{ !cancelled() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the .deb from the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(jq -r .version apps/desktop-tauri/src-tauri/tauri.conf.json)
+          gh release download "desktop-v${version}" --pattern '*.deb' --dir dl
+          cp dl/*.deb apps/desktop-tauri/flatpak/zirzircord.deb
+          git clone --depth 1 https://github.com/flathub/shared-modules.git apps/desktop-tauri/flatpak/shared-modules
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-inputs
+          path: |
+            apps/desktop-tauri/flatpak/zirzircord.deb
+            apps/desktop-tauri/flatpak/shared-modules
+
+  flatpak:
+    needs: flatpak-prep
+    if: ${{ !cancelled() && needs.flatpak-prep.result == 'success' }}
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-49
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: flatpak-inputs
+          path: apps/desktop-tauri/flatpak
+
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: ZirZirCord.flatpak
+          manifest-path: apps/desktop-tauri/flatpak/app.zirzircord.desktop.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+          upload-artifact: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-bundle
+          path: ZirZirCord.flatpak
+
+  flatpak-attach:
+    needs: flatpak
+    if: ${{ !cancelled() && needs.flatpak.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: flatpak-bundle
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(jq -r .version apps/desktop-tauri/src-tauri/tauri.conf.json)
+          gh release upload "desktop-v${version}" ZirZirCord.flatpak --clobber

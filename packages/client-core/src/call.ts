@@ -89,6 +89,13 @@ function micAllowed(p: Participant): boolean {
   return sources.length === 0 || sources.includes(PROTO_MICROPHONE as never);
 }
 
+/** True inside the Tauri desktop shell on Linux (not a Linux browser, not Android). */
+function isLinuxDesktopApp(): boolean {
+  const g = globalThis as { __TAURI__?: unknown; navigator?: { userAgent?: string } };
+  const ua = g.navigator?.userAgent ?? '';
+  return !!g.__TAURI__ && /Linux/.test(ua) && !/Android/.test(ua);
+}
+
 /** Turns getUserMedia failures into something a person can act on. */
 export function describeMicError(e: unknown): string {
   const name = (e as { name?: string })?.name ?? '';
@@ -214,6 +221,17 @@ export class CallManager {
 
   async join(sessionId: string, channelId: string) {
     if (this.state.channelId === channelId && this.state.status !== 'idle') return;
+    // No WebRTC means LiveKit can't connect; say so up front instead of letting the join sit on
+    // "Connecting…" forever. The known case is the Linux desktop app, whose WebKitGTK is built
+    // without WebRTC; anything else gets a generic message.
+    if (typeof RTCPeerConnection === 'undefined') {
+      this.error(
+        isLinuxDesktopApp()
+          ? 'Voice calls are not supported in the Linux desktop app yet. Text chat still works.'
+          : 'Voice calls are not supported here: this browser has no WebRTC. Text chat still works.',
+      );
+      return;
+    }
     await this.leave();
     this.set({ status: 'connecting', sessionId, channelId, screenSharing: false, cameraEnabled: false });
     try {

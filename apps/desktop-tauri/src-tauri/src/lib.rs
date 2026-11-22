@@ -22,6 +22,12 @@ const SCHEME: &str = "zirzircord";
 #[cfg(not(dev))]
 const UI_PORT: u16 = 14320;
 
+/// True when running inside a Flatpak sandbox (it sets FLATPAK_ID).
+#[allow(dead_code)]
+fn in_flatpak() -> bool {
+    std::env::var_os("FLATPAK_ID").is_some()
+}
+
 /// The currently registered push-to-talk key (so we can unregister it on change).
 #[derive(Default)]
 struct Ptt(Mutex<Option<Shortcut>>);
@@ -117,14 +123,34 @@ fn create_main_window(app: &AppHandle) -> tauri::Result<()> {
 
 /// Checks GitHub Releases for a newer signed build and installs it; it takes effect on the
 /// next launch (Windows' passive installer restarts the app itself). Release builds only.
+///
+/// Flatpak installs are read-only and the bundle has no Flatpak remote to update from, so
+/// there we only tell the user a new version exists and how to install it.
 #[cfg(not(dev))]
 fn check_for_update(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let Ok(updater) = app.updater() else { return };
-        if let Ok(Some(update)) = updater.check().await {
+        let Ok(Some(update)) = updater.check().await else { return };
+        if in_flatpak() {
+            notify_flatpak_update(&app, &update.version);
+        } else {
             let _ = update.download_and_install(|_, _| {}, || {}).await;
         }
     });
+}
+
+#[cfg(not(dev))]
+fn notify_flatpak_update(app: &AppHandle, version: &str) {
+    use tauri_plugin_notification::NotificationExt;
+    let _ = app
+        .notification()
+        .builder()
+        .title(format!("ZirZirCord {version} is available"))
+        .body(
+            "Download ZirZirCord.flatpak from the GitHub releases page, then run \
+             `flatpak install --user --reinstall ZirZirCord.flatpak`.",
+        )
+        .show();
 }
 
 fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -189,8 +215,11 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
 
+            // Flatpak registers the scheme through its own .desktop file; writing to ~/.local fails there.
             #[cfg(any(windows, target_os = "linux"))]
-            let _ = app.deep_link().register_all();
+            if !in_flatpak() {
+                let _ = app.deep_link().register_all();
+            }
 
             // Cold start via a deep link (macOS delivers it here too).
             if let Ok(Some(urls)) = app.deep_link().get_current() {
@@ -208,7 +237,10 @@ pub fn run() {
             create_main_window(&handle)?;
             #[cfg(not(dev))]
             check_for_update(handle.clone());
-            setup_tray(&handle)?;
+            // A missing tray (no StatusNotifier host / appindicator lib) must not stop the app.
+            if let Err(e) = setup_tray(&handle) {
+                eprintln!("tray unavailable: {e}");
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
