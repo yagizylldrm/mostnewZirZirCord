@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import { Vibration } from 'react-native';
 import { type AppState, CallManager, type CallState, ZirZirClient } from '@zirzircord/client-core';
+import { DEV_API_URL, PRODUCTION_API_URL } from '@zirzircord/shared';
 import { setDndCheck, sounds } from './sounds';
 import { storage } from './storage';
 
@@ -10,15 +11,22 @@ import { useShallow } from 'zustand/react/shallow';
 
 
 const K_SERVER = 'zz.serverUrl';
-export const defaultServer: string =
-  process.env.EXPO_PUBLIC_API_URL ?? (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ?? 'http://localhost:4000';
+export const defaultServer: string = (process.env.EXPO_PUBLIC_API_URL || (__DEV__ ? DEV_API_URL : PRODUCTION_API_URL)).replace(/\/$/, '');
+
+/** Servers earlier builds saved that no longer exist (the pre-migration *.sslip.io API). */
+const isObsoleteServer = (url: string) => /\.sslip\.io(?::\d+)?(?:\/|$)/i.test(url);
 
 export let zz: ZirZirClient;
 export let call: CallManager;
 
 /** Creates the client for a server URL (users can point the app at their own server). */
 export async function initClient(serverOverride?: string) {
-  const server = serverOverride ?? (await storage.get(K_SERVER)) ?? defaultServer;
+  let saved = await storage.get(K_SERVER);
+  if (saved && isObsoleteServer(saved)) {
+    await storage.remove(K_SERVER);
+    saved = null;
+  }
+  const server = serverOverride ?? saved ?? defaultServer;
   if (serverOverride) await storage.set(K_SERVER, serverOverride);
   zz?.socket?.disconnect();
   zz = new ZirZirClient({ apiUrl: server.replace(/\/$/, ''), storage, client: `mobile/${Constants.expoConfig?.version ?? '0'}` });
