@@ -123,18 +123,34 @@ fn create_main_window(app: &AppHandle) -> tauri::Result<()> {
 
 /// Checks GitHub Releases for a newer signed build and installs it; it takes effect on the
 /// next launch (Windows' passive installer restarts the app itself). Release builds only.
+///
+/// Flatpak installs are read-only and the bundle has no Flatpak remote to update from, so
+/// there we only tell the user a new version exists and how to install it.
 #[cfg(not(dev))]
 fn check_for_update(app: AppHandle) {
-    // Flatpak installs are read-only and updated through Flatpak itself.
-    if in_flatpak() {
-        return;
-    }
     tauri::async_runtime::spawn(async move {
         let Ok(updater) = app.updater() else { return };
-        if let Ok(Some(update)) = updater.check().await {
+        let Ok(Some(update)) = updater.check().await else { return };
+        if in_flatpak() {
+            notify_flatpak_update(&app, &update.version);
+        } else {
             let _ = update.download_and_install(|_, _| {}, || {}).await;
         }
     });
+}
+
+#[cfg(not(dev))]
+fn notify_flatpak_update(app: &AppHandle, version: &str) {
+    use tauri_plugin_notification::NotificationExt;
+    let _ = app
+        .notification()
+        .builder()
+        .title(format!("ZirZirCord {version} is available"))
+        .body(
+            "Download ZirZirCord.flatpak from the GitHub releases page, then run \
+             `flatpak install --user --reinstall ZirZirCord.flatpak`.",
+        )
+        .show();
 }
 
 fn setup_tray(app: &AppHandle) -> tauri::Result<()> {

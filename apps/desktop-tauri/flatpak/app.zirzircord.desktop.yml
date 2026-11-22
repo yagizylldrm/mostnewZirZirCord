@@ -6,7 +6,7 @@ app-id: app.zirzircord.desktop
 runtime: org.gnome.Platform
 runtime-version: '49'
 sdk: org.gnome.Sdk
-command: zirzircord
+command: zirzircord-desktop
 
 finish-args:
   - --share=ipc
@@ -27,7 +27,7 @@ modules:
     build-commands:
       - ar x zirzircord.deb data.tar.gz
       - tar xzf data.tar.gz
-      - bin=$(ls usr/bin | head -n1) && install -Dm755 "usr/bin/$bin" /app/bin/zirzircord
+      - bin=$(ls usr/bin | head -n1) && install -Dm755 "usr/bin/$bin" /app/bin/zirzircord-desktop
       - install -Dm644 app.zirzircord.desktop.desktop /app/share/applications/app.zirzircord.desktop.desktop
       - install -Dm644 app.zirzircord.desktop.metainfo.xml /app/share/metainfo/app.zirzircord.desktop.metainfo.xml
       - install -Dm644 icon-128.png /app/share/icons/hicolor/128x128/apps/app.zirzircord.desktop.png

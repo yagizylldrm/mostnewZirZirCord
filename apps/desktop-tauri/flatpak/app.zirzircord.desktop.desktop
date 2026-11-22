@@ -2,7 +2,7 @@
 Type=Application
 Name=ZirZirCord
 Comment=Chat and voice calls
-Exec=zirzircord %u
+Exec=zirzircord-desktop %u
 Icon=app.zirzircord.desktop
 Terminal=false
 Categories=Network;InstantMessaging;Chat;
