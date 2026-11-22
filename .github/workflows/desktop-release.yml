@@ -60,3 +60,32 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  # Repackages the Linux .deb from the draft release as a Flatpak bundle and attaches it.
+  flatpak:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the .deb from the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(jq -r .version apps/desktop-tauri/src-tauri/tauri.conf.json)
+          gh release download "desktop-v${version}" --pattern '*.deb' --dir apps/desktop-tauri/flatpak/dl
+          cp apps/desktop-tauri/flatpak/dl/*.deb apps/desktop-tauri/flatpak/zirzircord.deb
+          git clone --depth 1 https://github.com/flathub/shared-modules.git apps/desktop-tauri/flatpak/shared-modules
+
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: ZirZirCord.flatpak
+          manifest-path: apps/desktop-tauri/flatpak/app.zirzircord.desktop.yml
+          runtime-version: '49'
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(jq -r .version apps/desktop-tauri/src-tauri/tauri.conf.json)
+          gh release upload "desktop-v${version}" ZirZirCord.flatpak --clobber

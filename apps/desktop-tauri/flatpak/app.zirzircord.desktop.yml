@@ -1,0 +1,47 @@
+# Flatpak manifest for ZirZirCord. It repackages the .deb that `tauri build` produces
+# (same approach as https://v2.tauri.app/distribute/flatpak/), so no Rust/Node build happens here.
+#
+# Local build (Linux):  ./build-flatpak.sh
+app-id: app.zirzircord.desktop
+runtime: org.gnome.Platform
+runtime-version: '49'
+sdk: org.gnome.Sdk
+command: zirzircord
+
+finish-args:
+  - --share=ipc
+  - --share=network            # API + WebSocket
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio        # voice calls (mic + speakers)
+  - --device=all               # camera, and /dev/dri for GPU rendering
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.kde.StatusNotifierWatcher   # tray icon
+
+modules:
+  # Tray icon backend (Tauri dlopens libayatana-appindicator3). Fetched by build-flatpak.sh / CI.
+  - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
+
+  - name: zirzircord
+    buildsystem: simple
+    build-commands:
+      - ar x zirzircord.deb data.tar.gz
+      - tar xzf data.tar.gz
+      - bin=$(ls usr/bin | head -n1) && install -Dm755 "usr/bin/$bin" /app/bin/zirzircord
+      - install -Dm644 app.zirzircord.desktop.desktop /app/share/applications/app.zirzircord.desktop.desktop
+      - install -Dm644 app.zirzircord.desktop.metainfo.xml /app/share/metainfo/app.zirzircord.desktop.metainfo.xml
+      - install -Dm644 icon-128.png /app/share/icons/hicolor/128x128/apps/app.zirzircord.desktop.png
+      - install -Dm644 icon-256.png /app/share/icons/hicolor/256x256/apps/app.zirzircord.desktop.png
+    sources:
+      - type: file
+        path: zirzircord.deb        # copied in by build-flatpak.sh / CI
+      - type: file
+        path: app.zirzircord.desktop.desktop
+      - type: file
+        path: app.zirzircord.desktop.metainfo.xml
+      - type: file
+        path: ../src-tauri/icons/128x128.png
+        dest-filename: icon-128.png
+      - type: file
+        path: ../src-tauri/icons/128x128@2x.png
+        dest-filename: icon-256.png

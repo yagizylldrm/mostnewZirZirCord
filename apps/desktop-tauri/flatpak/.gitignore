@@ -1,0 +1,6 @@
+shared-modules/
+zirzircord.deb
+build-dir/
+repo/
+.flatpak-builder/
+*.flatpak

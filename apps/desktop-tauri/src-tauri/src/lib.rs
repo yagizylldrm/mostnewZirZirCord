@@ -22,6 +22,12 @@ const SCHEME: &str = "zirzircord";
 #[cfg(not(dev))]
 const UI_PORT: u16 = 14320;
 
+/// True when running inside a Flatpak sandbox (it sets FLATPAK_ID).
+#[allow(dead_code)]
+fn in_flatpak() -> bool {
+    std::env::var_os("FLATPAK_ID").is_some()
+}
+
 /// The currently registered push-to-talk key (so we can unregister it on change).
 #[derive(Default)]
 struct Ptt(Mutex<Option<Shortcut>>);
@@ -119,6 +125,10 @@ fn create_main_window(app: &AppHandle) -> tauri::Result<()> {
 /// next launch (Windows' passive installer restarts the app itself). Release builds only.
 #[cfg(not(dev))]
 fn check_for_update(app: AppHandle) {
+    // Flatpak installs are read-only and updated through Flatpak itself.
+    if in_flatpak() {
+        return;
+    }
     tauri::async_runtime::spawn(async move {
         let Ok(updater) = app.updater() else { return };
         if let Ok(Some(update)) = updater.check().await {
@@ -189,8 +199,11 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
 
+            // Flatpak registers the scheme through its own .desktop file; writing to ~/.local fails there.
             #[cfg(any(windows, target_os = "linux"))]
-            let _ = app.deep_link().register_all();
+            if !in_flatpak() {
+                let _ = app.deep_link().register_all();
+            }
 
             // Cold start via a deep link (macOS delivers it here too).
             if let Ok(Some(urls)) = app.deep_link().get_current() {
@@ -208,7 +221,10 @@ pub fn run() {
             create_main_window(&handle)?;
             #[cfg(not(dev))]
             check_for_update(handle.clone());
-            setup_tray(&handle)?;
+            // A missing tray (no StatusNotifier host / appindicator lib) must not stop the app.
+            if let Err(e) = setup_tray(&handle) {
+                eprintln!("tray unavailable: {e}");
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
