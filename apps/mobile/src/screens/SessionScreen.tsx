@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { AudioSession, VideoView } from '@livekit/react-native';
 import { type CallParticipant, type LocalMessage, isChannelMuted, isSessionMuted, listedMembers, memberName, mentionsToText, sessionUnread, mediaLabel } from '@zirzircord/client-core';
-import { QUICK_REACTIONS, can, canCreateChannel, canModerate, formatPlainText, formatSessionCode, isJumboEmoji, splitMentions, type MessageDTO } from '@zirzircord/shared';
+import { QUICK_REACTIONS, can, canCreateChannel, canModerate, formatPlainText, formatSessionCode, isJumboEmoji, nameProblem, splitMentions, type MessageDTO } from '@zirzircord/shared';
 import * as Clipboard from 'expo-clipboard';
 import { type ComponentRef, useEffect, useMemo, useState, useRef } from 'react';
 import { AppState as RNAppState } from 'react-native';
@@ -99,10 +99,19 @@ function NicknameEditor({ sessionId }: { sessionId: string }) {
   const [value, setValue] = useState(nick);
   return (
     <View style={{ gap: 6 }}>
-      <Text style={s.label}>Nickname in this session</Text>
+      <Text style={s.label}>Nickname in this session (6+ characters, no spaces)</Text>
       <View style={[s.row, { gap: 8 }]}>
         <TextInput style={[s.input, s.flex]} value={value} onChangeText={setValue} placeholder={me.displayName} placeholderTextColor={C.faint} maxLength={32} />
-        <Btn title="Save" onPress={() => zz.attempt(() => zz.api.setNickname(sessionId, value.trim() || null)).then((r) => r !== undefined && zz.notify('Saved', 'success'))} />
+        <Btn
+          title="Save"
+          onPress={() => {
+            const next = value.trim();
+            // Clearing is always fine; a new nickname follows the naming rules (an older one can stay).
+            const problem = next && next !== nick ? nameProblem(next) : null;
+            if (problem) return zz.notify(problem, 'error');
+            void zz.attempt(() => zz.api.setNickname(sessionId, next || null)).then((r) => r !== undefined && zz.notify('Saved', 'success'));
+          }}
+        />
       </View>
     </View>
   );

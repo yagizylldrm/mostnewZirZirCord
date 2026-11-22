@@ -8,3 +8,4 @@ export * from './mentions';
 export * from './format';
 export * from './shortcuts';
 export * from './crop';
+export * from './names';

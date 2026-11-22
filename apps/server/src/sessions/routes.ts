@@ -8,6 +8,7 @@ import {
   createSessionSchema,
   generateSessionCode,
   joinSessionSchema,
+  nameProblem,
   normalizeSessionCode,
   notifySettingsSchema,
   serverMuteSchema,
@@ -226,7 +227,12 @@ export async function sessionRoutes(app: FastifyInstance) {
   app.patch('/sessions/:id/members/me', auth, async (req) => {
     const { id } = sid.parse(req.params);
     const body = updateMemberSchema.parse(req.body);
-    await requireMember(id, req.auth.userId);
+    const member = await requireMember(id, req.auth.userId);
+    // Clearing the nickname is always fine; a new one follows the naming rules (an older one can stay).
+    if (body.nickname && body.nickname !== member.nickname) {
+      const problem = nameProblem(body.nickname);
+      if (problem) throw badRequest(problem, 'invalid_name');
+    }
     await prisma.sessionMember.update({
       where: { sessionId_userId: { sessionId: id, userId: req.auth.userId } },
       data: { nickname: body.nickname || null },
