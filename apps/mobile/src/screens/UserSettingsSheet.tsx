@@ -1,4 +1,4 @@
-import { STATUSES, type UserStatus } from '@zirzircord/shared';
+import { STATUSES, type UserStatus, nameProblem } from '@zirzircord/shared';
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
@@ -76,6 +76,9 @@ export function UserSettingsSheet({ visible, onClose }: { visible: boolean; onCl
       <Btn
         title="Save profile"
         onPress={async () => {
+          // A new name follows the naming rules; an older, shorter one can stay.
+          const problem = name.trim() !== me.displayName ? nameProblem(name) : null;
+          if (problem) return zz.notify(problem, 'error');
           const u = await zz.attempt(() => zz.updateProfile({ displayName: name.trim(), bio, bannerColor: color, status }));
           if (u) zz.notify('Profile saved', 'success');
         }}

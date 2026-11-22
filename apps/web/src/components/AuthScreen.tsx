@@ -1,3 +1,4 @@
+import { nameProblem } from '@zirzircord/shared';
 import { type FormEvent, useState } from 'react';
 import { useApp, zz } from '../lib/zz';
 import { Button, Field, Logo, cx, inputCls } from './ui';
@@ -15,6 +16,8 @@ export function AuthScreen() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    const problem = tab === 'login' ? null : nameProblem(name);
+    if (problem) return setError(problem);
     setBusy(true);
     setError('');
     try {
@@ -54,7 +57,7 @@ export function AuthScreen() {
           ))}
         </div>
         {tab !== 'login' && (
-          <Field label="Display name">
+          <Field label="Display name" hint="At least 6 characters, no spaces.">
             <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} maxLength={32} required autoFocus />
           </Field>
         )}
