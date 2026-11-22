@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=ZirZirCord
-Comment=Chat and voice calls
+Comment=Chat with friends
 Exec=zirzircord-desktop %u
 Icon=app.zirzircord.desktop
 Terminal=false

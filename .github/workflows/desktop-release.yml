@@ -66,7 +66,7 @@ jobs:
           projectPath: apps/desktop-tauri
           tagName: desktop-v__VERSION__
           releaseName: 'ZirZirCord Desktop v__VERSION__'
-          releaseBody: 'Unsigned builds: on macOS right-click the app and choose Open the first time; on Windows choose "More info" then "Run anyway". Linux: use the .deb (Ubuntu/Debian), .rpm (Fedora/openSUSE), .flatpak (any distro; it does not auto-update, the app tells you when a new version is out: download the new ZirZirCord.flatpak and run `flatpak install --user --reinstall ZirZirCord.flatpak`) or the AppImage (chmod +x; on Ubuntu 24.04+ it needs `sudo apt install libfuse2t64`, on Arch `sudo pacman -S fuse2`). Linux voice calls are experimental.'
+          releaseBody: 'Unsigned builds: on macOS right-click the app and choose Open the first time; on Windows choose "More info" then "Run anyway". Linux: use the .deb (Ubuntu/Debian), .rpm (Fedora/openSUSE), .flatpak (any distro; it does not auto-update, the app tells you when a new version is out: download the new ZirZirCord.flatpak and run `flatpak install --user --reinstall ZirZirCord.flatpak`) or the AppImage (chmod +x; on Ubuntu 24.04+ it needs `sudo apt install libfuse2t64`, on Arch `sudo pacman -S fuse2`). Linux: text chat only, voice calls are not supported yet.'
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

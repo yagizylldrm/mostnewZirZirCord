@@ -2,17 +2,18 @@
 <component type="desktop-application">
   <id>app.zirzircord.desktop</id>
   <name>ZirZirCord</name>
-  <summary>Chat and voice calls with friends</summary>
+  <summary>Chat with friends</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>LicenseRef-proprietary</project_license>
   <description>
-    <p>ZirZirCord desktop app: text chat, voice and video calls, and screen sharing.</p>
+    <p>ZirZirCord desktop app: text chat in private sessions. Voice and video calls are not supported on Linux yet.</p>
   </description>
   <launchable type="desktop-id">app.zirzircord.desktop.desktop</launchable>
   <url type="homepage">https://github.com/yagizylldrm/mostnewZirZirCord</url>
   <provides><id>app.zirzircord.desktop</id></provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.1.4" date="2026-11-22"/>
     <release version="0.1.3" date="2026-11-22"/>
     <release version="0.1.2" date="2026-11-22"/>
   </releases>
