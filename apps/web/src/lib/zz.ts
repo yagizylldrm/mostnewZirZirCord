@@ -1,4 +1,5 @@
 import { type AppState, CallManager, type CallState, type SoundEvent, ZirZirClient, webStorage } from '@zirzircord/client-core';
+import { type Bindings, parseBindings } from '@zirzircord/shared';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { createStore } from 'zustand/vanilla';
@@ -74,6 +75,8 @@ export interface UiState {
   profile: { userId: string; sessionId: string; x: number; y: number } | null;
   lightbox: string | null;
   pttKey: string;
+  /** In-app keyboard shortcuts (see @zirzircord/shared shortcuts). */
+  shortcuts: Bindings;
   /** Screen share shown in the floating mini player (stays visible over chat). */
   miniScreen: { sessionId: string; identity: string } | null;
 }
@@ -86,6 +89,13 @@ export const ui = createStore<UiState>(() => ({
   profile: null,
   lightbox: null,
   miniScreen: null,
+  shortcuts: (() => {
+    try {
+      return parseBindings(localStorage.getItem('zz.shortcuts'));
+    } catch {
+      return parseBindings(null);
+    }
+  })(),
   pttKey: (() => {
     try {
       return localStorage.getItem('zz.pttKey') ?? 'Backquote';
