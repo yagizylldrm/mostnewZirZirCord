@@ -6,12 +6,18 @@ on:
   push:
     tags: ['desktop-v*']
   workflow_dispatch:
+    inputs:
+      flatpak_only:
+        description: 'Only rebuild the Flatpak from the existing draft release .deb'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 jobs:
   build:
+    if: ${{ !inputs.flatpak_only }}
     strategy:
       fail-fast: false
       matrix:
@@ -66,8 +72,11 @@ jobs:
           args: ${{ matrix.args }}
 
   # Repackages the Linux .deb from the draft release as a Flatpak bundle and attaches it.
-  flatpak:
+  # Split in three: flatpak-builder only exists in the Flathub container, which has no `gh`.
+  flatpak-prep:
     needs: build
+    # Also runs when `build` was skipped via the flatpak_only input.
+    if: ${{ !cancelled() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -77,15 +86,54 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           version=$(jq -r .version apps/desktop-tauri/src-tauri/tauri.conf.json)
-          gh release download "desktop-v${version}" --pattern '*.deb' --dir apps/desktop-tauri/flatpak/dl
-          cp apps/desktop-tauri/flatpak/dl/*.deb apps/desktop-tauri/flatpak/zirzircord.deb
+          gh release download "desktop-v${version}" --pattern '*.deb' --dir dl
+          cp dl/*.deb apps/desktop-tauri/flatpak/zirzircord.deb
           git clone --depth 1 https://github.com/flathub/shared-modules.git apps/desktop-tauri/flatpak/shared-modules
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-inputs
+          path: |
+            apps/desktop-tauri/flatpak/zirzircord.deb
+            apps/desktop-tauri/flatpak/shared-modules
+
+  flatpak:
+    needs: flatpak-prep
+    if: ${{ !cancelled() && needs.flatpak-prep.result == 'success' }}
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-49
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: flatpak-inputs
+          path: apps/desktop-tauri/flatpak
 
       - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           bundle: ZirZirCord.flatpak
           manifest-path: apps/desktop-tauri/flatpak/app.zirzircord.desktop.yml
-          runtime-version: '49'
+          cache-key: flatpak-builder-${{ github.sha }}
+          upload-artifact: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-bundle
+          path: ZirZirCord.flatpak
+
+  flatpak-attach:
+    needs: flatpak
+    if: ${{ !cancelled() && needs.flatpak.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: flatpak-bundle
 
       - name: Attach to the release
         env:
