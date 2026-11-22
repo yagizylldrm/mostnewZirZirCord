@@ -3,7 +3,7 @@
     "name": "ZirZirCord",
     "slug": "zirzircord",
     "scheme": "zirzircord",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
